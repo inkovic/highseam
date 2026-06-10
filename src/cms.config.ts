@@ -11,9 +11,12 @@ const isLoggedIn: AccessFn = ({ req }) => Boolean(req.user);
 const isAdminOrSelf: AccessFn = ({ req, id }) =>
 	req.user?.role === 'admin' || (Boolean(req.user) && req.user?.id === id);
 
-/** Anonymous visitors only see published docs; editors see everything. */
+/**
+ * Anonymous visitors only see published docs; editors see everything.
+ * `_status` is managed by the versions/drafts engine.
+ */
 const publishedOrLoggedIn: AccessFn = ({ req }) =>
-	req.user ? true : { status: { equals: 'published' } };
+	req.user ? true : { _status: { equals: 'published' } };
 
 const users = defineCollection({
 	slug: 'users',
@@ -60,10 +63,13 @@ const categories = defineCollection({
 const posts = defineCollection({
 	slug: 'posts',
 	labels: { singular: 'Post', plural: 'Posts' },
+	// Drafts + version history: save drafts without touching the published
+	// doc, publish/unpublish, restore old versions.
+	versions: { drafts: true, maxPerDoc: 20 },
 	admin: {
 		useAsTitle: 'title',
-		defaultColumns: ['title', 'status', 'author', 'publishedAt'],
-		description: 'Blog posts with relationships, hooks, and status-based access.'
+		defaultColumns: ['title', '_status', 'author', 'publishedAt'],
+		description: 'Versioned posts with drafts, relationships, and hooks.'
 	},
 	access: {
 		read: publishedOrLoggedIn,
@@ -82,7 +88,7 @@ const posts = defineCollection({
 						.replace(/[^a-z0-9]+/g, '-')
 						.replace(/^-+|-+$/g, '');
 				}
-				if (data.status === 'published' && !data.publishedAt) {
+				if (data._status === 'published' && !data.publishedAt) {
 					data.publishedAt = new Date().toISOString();
 				}
 				return data;
@@ -92,16 +98,6 @@ const posts = defineCollection({
 	fields: [
 		{ name: 'title', type: 'text', required: true, maxLength: 200 },
 		{ name: 'slug', type: 'text', unique: true, admin: { description: 'Auto-generated from title if left blank' } },
-		{
-			name: 'status',
-			type: 'select',
-			required: true,
-			defaultValue: 'draft',
-			options: [
-				{ label: 'Draft', value: 'draft' },
-				{ label: 'Published', value: 'published' }
-			]
-		},
 		{ name: 'excerpt', type: 'textarea', maxLength: 400 },
 		{ name: 'content', type: 'richText' },
 		{ name: 'author', type: 'relationship', relationTo: 'users' },
@@ -116,7 +112,7 @@ const pages = defineCollection({
 	labels: { singular: 'Page', plural: 'Pages' },
 	admin: { useAsTitle: 'title', defaultColumns: ['title', 'slug', 'status'] },
 	access: {
-		read: publishedOrLoggedIn,
+		read: ({ req }) => (req.user ? true : { status: { equals: 'published' } }),
 		create: isLoggedIn,
 		update: isLoggedIn,
 		delete: isAdmin
@@ -135,12 +131,50 @@ const pages = defineCollection({
 			]
 		},
 		{
-			name: 'sections',
-			type: 'array',
-			admin: { description: 'Flexible content blocks (heading + body rows)' },
-			fields: [
-				{ name: 'heading', type: 'text', required: true },
-				{ name: 'body', type: 'textarea' }
+			// Payload-style blocks: a flexible layout builder. Editors add,
+			// reorder, and remove blocks of different shapes in the admin.
+			name: 'layout',
+			type: 'blocks',
+			admin: { description: 'Flexible page layout — add and reorder blocks' },
+			blocks: [
+				{
+					slug: 'hero',
+					labels: { singular: 'Hero', plural: 'Heroes' },
+					fields: [
+						{ name: 'heading', type: 'text', required: true },
+						{ name: 'subheading', type: 'textarea' },
+						{ name: 'ctaLabel', type: 'text' },
+						{ name: 'ctaUrl', type: 'text' }
+					]
+				},
+				{
+					slug: 'content',
+					labels: { singular: 'Content', plural: 'Content blocks' },
+					fields: [{ name: 'body', type: 'richText', required: true }]
+				},
+				{
+					slug: 'quote',
+					labels: { singular: 'Quote', plural: 'Quotes' },
+					fields: [
+						{ name: 'text', type: 'textarea', required: true },
+						{ name: 'attribution', type: 'text' }
+					]
+				},
+				{
+					slug: 'feature-grid',
+					labels: { singular: 'Feature grid', plural: 'Feature grids' },
+					fields: [
+						{ name: 'heading', type: 'text' },
+						{
+							name: 'features',
+							type: 'array',
+							fields: [
+								{ name: 'title', type: 'text', required: true },
+								{ name: 'description', type: 'textarea' }
+							]
+						}
+					]
+				}
 			]
 		},
 		{ name: 'meta', type: 'json', admin: { description: 'Arbitrary JSON metadata' } }

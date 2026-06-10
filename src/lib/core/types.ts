@@ -32,6 +32,7 @@ export type FieldType =
 	| 'select'
 	| 'relationship'
 	| 'array'
+	| 'blocks'
 	| 'json';
 
 export interface SelectOption {
@@ -98,6 +99,25 @@ export interface ArrayField extends BaseField {
 	fields: Field[];
 }
 
+/** One block shape available inside a blocks field (like Payload's blocks). */
+export interface BlockConfig {
+	slug: string;
+	labels?: { singular: string; plural: string };
+	fields: Field[];
+}
+
+/**
+ * Payload-style flexible layout builder. Value is an array of
+ * `{ blockType: '<slug>', ...fieldValues }` rows; editors can add, remove,
+ * and reorder blocks of different shapes.
+ */
+export interface BlocksField extends BaseField {
+	type: 'blocks';
+	blocks: BlockConfig[];
+	minRows?: number;
+	maxRows?: number;
+}
+
 export interface JsonField extends BaseField {
 	type: 'json';
 }
@@ -110,6 +130,7 @@ export type Field =
 	| SelectField
 	| RelationshipField
 	| ArrayField
+	| BlocksField
 	| JsonField;
 
 // ---------------------------------------------------------------------------
@@ -198,6 +219,13 @@ export interface AuthConfig {
 	tokenExpiration?: number;
 }
 
+export interface VersionsConfig {
+	/** Enable draft state: saves can target a draft without touching the published doc. */
+	drafts?: boolean;
+	/** Versions kept per document (oldest pruned). Default 20. */
+	maxPerDoc?: number;
+}
+
 export interface CollectionConfig {
 	slug: string;
 	labels?: { singular: string; plural: string };
@@ -205,9 +233,21 @@ export interface CollectionConfig {
 	/** Enable email+password auth for this collection (like Payload). */
 	auth?: boolean | AuthConfig;
 	timestamps?: boolean; // default true
+	/**
+	 * Enable version history (and optionally drafts). Versioned docs get a
+	 * managed `_status` of 'draft' | 'published'; every save snapshots into a
+	 * shadow versions store.
+	 */
+	versions?: boolean | VersionsConfig;
 	access?: CollectionAccess;
 	hooks?: CollectionHooks;
 	admin?: CollectionAdminConfig;
+}
+
+/** A stored version snapshot. */
+export interface VersionDoc extends Doc {
+	parent: string;
+	snapshot: Doc;
 }
 
 // ---------------------------------------------------------------------------

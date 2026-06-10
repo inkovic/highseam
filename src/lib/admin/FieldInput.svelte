@@ -145,7 +145,7 @@
 			{#if !field.required && !field.hasMany}
 				<option value="">—</option>
 			{/if}
-			{#each relOptions[field.name] ?? [] as opt (opt.id)}
+			{#each relOptions[field.relationTo ?? field.name] ?? [] as opt (opt.id)}
 				<option value={opt.id} selected={isSelected(value, opt.id)}>{opt.title}</option>
 			{/each}
 		</select>

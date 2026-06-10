@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import BlocksInput from './BlocksInput.svelte';
 	import FieldInput from './FieldInput.svelte';
 	import type { ClientCollection } from './client';
 	import type { RelOption } from './server';
@@ -11,7 +12,9 @@
 		errors = {},
 		message = undefined,
 		submitLabel = 'Save',
-		action = ''
+		action = '',
+		draftAction = undefined,
+		draftLabel = 'Save draft'
 	}: {
 		collection: ClientCollection;
 		values?: Record<string, unknown>;
@@ -20,6 +23,9 @@
 		message?: string;
 		submitLabel?: string;
 		action?: string;
+		/** When set (drafts-enabled collections), renders a secondary submit posting here. */
+		draftAction?: string;
+		draftLabel?: string;
 	} = $props();
 
 	const visibleFields = $derived(collection.fields.filter((f) => !f.admin.hidden));
@@ -53,7 +59,12 @@
 	{/if}
 
 	{#each visibleFields as field (field.name)}
-		<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />
+		{#if field.type === 'blocks' || field.type === 'array'}
+			<BlocksInput {field} value={values[field.name]} {relOptions} />
+			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
+		{:else}
+			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />
+		{/if}
 	{/each}
 
 	{#if message}
@@ -64,6 +75,14 @@
 		<button class="rounded-(--radius) bg-(--color-primary) px-5 py-2 text-sm font-semibold text-(--color-primary-fg) hover:opacity-90">
 			{submitLabel}
 		</button>
+		{#if draftAction}
+			<button
+				formaction={draftAction}
+				class="rounded-(--radius) border border-(--color-border) px-5 py-2 text-sm text-(--color-fg) hover:border-(--color-primary)"
+			>
+				{draftLabel}
+			</button>
+		{/if}
 		<a href="/admin/{collection.slug}" class="text-sm text-(--color-muted) hover:text-(--color-fg)">Cancel</a>
 	</div>
 </form>
