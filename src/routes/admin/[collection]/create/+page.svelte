@@ -20,5 +20,8 @@
 	values={form?.values ?? {}}
 	errors={form?.errors ?? {}}
 	message={form?.message}
-	submitLabel="Create"
+	submitLabel={data.collection.drafts ? 'Create & publish' : 'Create'}
+	action="?/create"
+	draftAction={data.collection.drafts ? '?/draft' : undefined}
+	draftLabel="Create as draft"
 />

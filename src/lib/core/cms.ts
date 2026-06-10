@@ -16,6 +16,8 @@ import type {
 	FindArgs,
 	PaginatedDocs,
 	ReqContext,
+	VersionDoc,
+	VersionsConfig,
 	Where
 } from './types';
 import { APIError } from './types';
@@ -26,6 +28,13 @@ export interface OperationOptions {
 	overrideAccess?: boolean;
 	/** Relationship population depth. Default 1. */
 	depth?: number;
+	/**
+	 * Drafts (versioned collections only):
+	 * - on update: save changes as a draft version without touching the published doc
+	 * - on create: create the doc in draft state
+	 * - on findByID: return the latest draft instead of the published doc
+	 */
+	draft?: boolean;
 }
 
 const defaultAccess: AccessFn = ({ req }) => Boolean(req.user);
@@ -60,8 +69,45 @@ export class CMS {
 
 	async init(): Promise<void> {
 		if (this.initialized) return;
-		await this.db.init(this.config.collections.map((c) => c.slug));
+		const slugs = this.config.collections.map((c) => c.slug);
+		const versionStores = this.config.collections
+			.filter((c) => c.versions)
+			.map((c) => versionsSlug(c.slug));
+		await this.db.init([...slugs, ...versionStores]);
 		this.initialized = true;
+	}
+
+	// -------------------------------------------------------------------------
+	// Versions / drafts helpers
+	// -------------------------------------------------------------------------
+
+	versionsConfig(col: CollectionConfig): Required<VersionsConfig> | null {
+		if (!col.versions) return null;
+		const v = typeof col.versions === 'object' ? col.versions : {};
+		return { drafts: v.drafts ?? false, maxPerDoc: v.maxPerDoc ?? 20 };
+	}
+
+	private async snapshotVersion(col: CollectionConfig, doc: Doc): Promise<void> {
+		const vcfg = this.versionsConfig(col);
+		if (!vcfg) return;
+		const store = versionsSlug(col.slug);
+		await this.db.create(store, { parent: doc.id, snapshot: { ...doc } });
+		// prune oldest beyond maxPerDoc
+		const { docs } = await this.db.find(store, {
+			where: { parent: { equals: doc.id } },
+			sort: '-createdAt',
+			limit: 0
+		});
+		for (const old of docs.slice(vcfg.maxPerDoc)) await this.db.delete(store, old.id);
+	}
+
+	private async latestVersion(slug: string, id: string): Promise<VersionDoc | null> {
+		const { docs } = await this.db.find(versionsSlug(slug), {
+			where: { parent: { equals: id } },
+			sort: '-createdAt',
+			limit: 1
+		});
+		return (docs[0] as VersionDoc) ?? null;
 	}
 
 	// -------------------------------------------------------------------------
@@ -126,8 +172,19 @@ export class CMS {
 	): Promise<Doc> {
 		await this.init();
 		const col = this.collection(slug);
-		const doc = await this.db.findById(slug, id);
+		let doc = await this.db.findById(slug, id);
 		if (!doc) throw new APIError('Not found', 404);
+
+		// Draft read: requires update access (drafts are unpublished content).
+		if (opts.draft && this.versionsConfig(col)?.drafts) {
+			if (!opts.overrideAccess) {
+				const access = await this.evalAccess(col, 'update', { req, id, doc });
+				if (!access.allowed) throw new APIError('Forbidden', 403);
+			}
+			const latest = await this.latestVersion(slug, id);
+			if (latest && latest.snapshot) doc = { ...latest.snapshot, id };
+			return this.afterRead(req, col, doc, opts.depth ?? 1);
+		}
 
 		if (!opts.overrideAccess) {
 			const access = await this.evalAccess(col, 'read', { req, id, doc });
@@ -168,8 +225,13 @@ export class CMS {
 			data.email = (data.email as string).toLowerCase();
 		}
 
+		if (this.versionsConfig(col)) {
+			data._status = opts.draft ? 'draft' : 'published';
+		}
+
 		data = await this.runDataHooks(col, 'beforeChange', req, 'create', data);
 		const doc = await this.db.create(slug, data);
+		await this.snapshotVersion(col, doc);
 
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'create', collection: slug, doc, data });
@@ -211,12 +273,146 @@ export class CMS {
 		}
 
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, originalDoc);
+
+		// Draft save: snapshot a version, leave the live document untouched.
+		if (opts.draft && this.versionsConfig(col)?.drafts) {
+			const now = new Date().toISOString();
+			const draftDoc: Doc = {
+				...stripMeta(originalDoc),
+				...(await this.draftBase(col, slug, id)),
+				...data,
+				_status: 'draft',
+				id,
+				createdAt: originalDoc.createdAt,
+				updatedAt: now
+			};
+			await this.snapshotVersion(col, draftDoc);
+			for (const hook of col.hooks?.afterChange ?? [])
+				await hook({ req, operation: 'update', collection: slug, doc: draftDoc, data, originalDoc });
+			return this.afterRead(req, col, draftDoc, opts.depth ?? 1);
+		}
+
 		const doc = await this.db.update(slug, id, data);
+		await this.snapshotVersion(col, doc);
 
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc, data, originalDoc });
 
 		return this.afterRead(req, col, doc, opts.depth ?? 1);
+	}
+
+	/** Base data for a draft save: the latest draft if one exists, else nothing. */
+	private async draftBase(
+		col: CollectionConfig,
+		slug: string,
+		id: string
+	): Promise<Record<string, unknown>> {
+		const latest = await this.latestVersion(slug, id);
+		if (latest?.snapshot && latest.snapshot._status === 'draft') {
+			return stripMeta(latest.snapshot as Doc);
+		}
+		return {};
+	}
+
+	// -------------------------------------------------------------------------
+	// Publish / unpublish / version history
+	// -------------------------------------------------------------------------
+
+	/** Promote the latest draft (or current doc) to published. */
+	async publish(req: ReqContext, slug: string, id: string, opts: OperationOptions = {}): Promise<Doc> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.versionsConfig(col)) throw new APIError(`Collection ${slug} is not versioned`, 400);
+		const doc = await this.db.findById(slug, id);
+		if (!doc) throw new APIError('Not found', 404);
+
+		if (!opts.overrideAccess) {
+			const access = await this.evalAccess(col, 'update', { req, id, doc });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+
+		const latest = await this.latestVersion(slug, id);
+		const source = latest?.snapshot ? { ...stripMeta(latest.snapshot as Doc) } : stripMeta(doc);
+		let data: Record<string, unknown> = { ...source, _status: 'published' };
+		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, doc);
+		validateData(col, data);
+		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, doc);
+
+		const updated = await this.db.update(slug, id, data);
+		await this.snapshotVersion(col, updated);
+		for (const hook of col.hooks?.afterChange ?? [])
+			await hook({ req, operation: 'update', collection: slug, doc: updated, data, originalDoc: doc });
+		return this.afterRead(req, col, updated, opts.depth ?? 1);
+	}
+
+	/** Revert a published doc to draft state (hides it from published-only readers). */
+	async unpublish(req: ReqContext, slug: string, id: string, opts: OperationOptions = {}): Promise<Doc> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.versionsConfig(col)) throw new APIError(`Collection ${slug} is not versioned`, 400);
+		const doc = await this.db.findById(slug, id);
+		if (!doc) throw new APIError('Not found', 404);
+
+		if (!opts.overrideAccess) {
+			const access = await this.evalAccess(col, 'update', { req, id, doc });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+		const updated = await this.db.update(slug, id, { _status: 'draft' });
+		await this.snapshotVersion(col, updated);
+		return this.afterRead(req, col, updated, opts.depth ?? 1);
+	}
+
+	/** List version snapshots for a document, newest first. */
+	async findVersions(
+		req: ReqContext,
+		slug: string,
+		id: string,
+		opts: OperationOptions = {}
+	): Promise<VersionDoc[]> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.versionsConfig(col)) throw new APIError(`Collection ${slug} is not versioned`, 400);
+
+		if (!opts.overrideAccess) {
+			const doc = await this.db.findById(slug, id);
+			if (!doc) throw new APIError('Not found', 404);
+			const access = await this.evalAccess(col, 'update', { req, id, doc });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+		const { docs } = await this.db.find(versionsSlug(slug), {
+			where: { parent: { equals: id } },
+			sort: '-createdAt',
+			limit: 0
+		});
+		return docs as VersionDoc[];
+	}
+
+	/** Restore a version snapshot onto the live document. */
+	async restoreVersion(
+		req: ReqContext,
+		slug: string,
+		id: string,
+		versionId: string,
+		opts: OperationOptions = {}
+	): Promise<Doc> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.versionsConfig(col)) throw new APIError(`Collection ${slug} is not versioned`, 400);
+		const doc = await this.db.findById(slug, id);
+		if (!doc) throw new APIError('Not found', 404);
+
+		if (!opts.overrideAccess) {
+			const access = await this.evalAccess(col, 'update', { req, id, doc });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+
+		const version = (await this.db.findById(versionsSlug(slug), versionId)) as VersionDoc | null;
+		if (!version || version.parent !== id) throw new APIError('Version not found', 404);
+
+		const data = { ...stripMeta(version.snapshot as Doc) };
+		const updated = await this.db.update(slug, id, data);
+		await this.snapshotVersion(col, updated);
+		return this.afterRead(req, col, updated, opts.depth ?? 1);
 	}
 
 	async delete(
@@ -392,6 +588,10 @@ function clamp(n: number, min: number, max: number): number {
 function stripMeta(doc: Doc): Record<string, unknown> {
 	const { id: _i, createdAt: _c, updatedAt: _u, _hash: _h, ...rest } = doc;
 	return rest;
+}
+
+export function versionsSlug(slug: string): string {
+	return `_versions_${slug}`;
 }
 
 export { APIError };

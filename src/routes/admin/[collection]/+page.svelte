@@ -11,6 +11,7 @@
 				c === 'createdAt' ||
 				c === 'updatedAt' ||
 				c === 'email' ||
+				c === '_status' ||
 				data.collection.fields.some((f) => f.name === c)
 		)
 	);

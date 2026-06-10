@@ -12,7 +12,12 @@ export function formToData(form: FormData, col: CollectionConfig): Record<string
 			}
 			continue;
 		}
-		if (form.has(field.name)) data[field.name] = form.get(field.name);
+		// Use the LAST entry: checkboxes submit a hidden "false" followed by
+		// "true" when checked.
+		if (form.has(field.name)) {
+			const all = form.getAll(field.name);
+			data[field.name] = all[all.length - 1];
+		}
 	}
 	if (col.auth) {
 		if (form.has('email')) data.email = form.get('email');

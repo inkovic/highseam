@@ -116,14 +116,44 @@ npm run deploy
 
 Set a strong `CMS_SECRET` (Pages env var). The CMS auto-detects the D1 binding.
 
+## Drafts & versions
+
+Add `versions: { drafts: true }` to a collection and it gets a managed
+`_status` ('draft' | 'published'), full version history in a shadow store, and
+a draft workflow in both APIs and the admin (Save draft / Publish / Unpublish /
+Restore, with status badges and a versions sidebar):
+
+```
+PATCH /api/posts/:id?draft=true          # save a draft; published doc untouched
+GET   /api/posts/:id?draft=true          # read the latest draft (update access)
+POST  /api/posts/:id/publish             # promote latest draft
+POST  /api/posts/:id/unpublish           # hide from published-only readers
+GET   /api/posts/:id/versions            # history, newest first
+POST  /api/posts/:id/versions/:vid/restore
+```
+
+Combined with query-constraint access control
+(`read: ({ req }) => req.user ? true : { _status: { equals: 'published' } }`),
+anonymous consumers never see unpublished content.
+
+## Blocks
+
+The `blocks` field is Payload's flexible layout builder: an ordered list of
+typed sections. Declare block shapes in config; the admin renders an
+interactive editor (add / remove / reorder, per-block fields). Values store as
+`[{ blockType: 'hero', ... }, { blockType: 'quote', ... }]` — see the `pages`
+collection's `layout` field for a working example with four block types.
+
 ## Scope: what's in, what's not
 
-Recreated from Payload: config-driven collections, field types, auth collections,
-access control (boolean + query-constraint), hooks (`beforeValidate`, `beforeChange`,
-`afterChange`, `afterRead`, `beforeDelete`, `afterDelete`), unique fields, defaults,
-validation, pagination/filtering/sorting, relationship population with depth,
+Recreated from Payload: config-driven collections, field types (including
+`blocks`), auth collections, access control (boolean + query-constraint), hooks
+(`beforeValidate`, `beforeChange`, `afterChange`, `afterRead`, `beforeDelete`,
+`afterDelete`), unique fields, defaults, validation,
+pagination/filtering/sorting, relationship population with depth, **drafts &
+version history** (save draft / publish / unpublish / restore / prune),
 first-user onboarding, REST + Local APIs, auto-generated admin.
 
-Not recreated (yet): drafts & versions, GraphQL, file uploads/media, the Lexical
-rich-text editor (richText is a markdown textarea), localization, jobs/queues,
-plugins, globals.
+Not recreated (yet): GraphQL, file uploads/media, the Lexical rich-text editor
+(richText is a markdown textarea), localization, jobs/queues, plugins, globals,
+autosave, document locking, scheduled publishing.

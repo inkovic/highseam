@@ -63,6 +63,24 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			}
 			break;
 		}
+		case 'blocks': {
+			if (!Array.isArray(value)) return 'Must be an array of blocks';
+			if (field.minRows && value.length < field.minRows)
+				return `Requires at least ${field.minRows} block(s)`;
+			if (field.maxRows && value.length > field.maxRows)
+				return `Allows at most ${field.maxRows} block(s)`;
+			for (const [i, row] of value.entries()) {
+				if (typeof row !== 'object' || row === null) return `Block ${i + 1} must be an object`;
+				const blockType = (row as Record<string, unknown>).blockType;
+				const block = field.blocks.find((b) => b.slug === blockType);
+				if (!block) return `Block ${i + 1}: unknown blockType "${String(blockType)}"`;
+				for (const sub of block.fields) {
+					const err = validateField(sub, (row as Record<string, unknown>)[sub.name], data);
+					if (err) return `${block.slug} (block ${i + 1}): ${err}`;
+				}
+			}
+			break;
+		}
 		case 'json':
 			break;
 	}
@@ -147,6 +165,7 @@ function coerce(field: Field, value: unknown): unknown {
 			}
 			return value;
 		case 'array':
+		case 'blocks':
 		case 'json':
 			if (typeof value === 'string') {
 				try {

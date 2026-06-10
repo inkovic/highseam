@@ -18,10 +18,19 @@ export interface ClientField {
 	hasMany?: boolean;
 	relationTo?: string;
 	fields?: ClientField[];
+	blocks?: ClientBlock[];
+	minRows?: number;
+	maxRows?: number;
 	minLength?: number;
 	maxLength?: number;
 	min?: number;
 	max?: number;
+}
+
+export interface ClientBlock {
+	slug: string;
+	label: string;
+	fields: ClientField[];
 }
 
 export interface ClientCollection {
@@ -32,6 +41,8 @@ export interface ClientCollection {
 	defaultColumns: string[];
 	description?: string;
 	hidden: boolean;
+	versioned: boolean;
+	drafts: boolean;
 	fields: ClientField[];
 }
 
@@ -66,6 +77,15 @@ function toClientField(f: Field): ClientField {
 		base.hasMany = f.hasMany;
 	}
 	if (f.type === 'array') base.fields = f.fields.map(toClientField);
+	if (f.type === 'blocks') {
+		base.blocks = f.blocks.map((b) => ({
+			slug: b.slug,
+			label: b.labels?.singular ?? labelize(b.slug),
+			fields: b.fields.map(toClientField)
+		}));
+		base.minRows = f.minRows;
+		base.maxRows = f.maxRows;
+	}
 	if (f.type === 'text' || f.type === 'textarea' || f.type === 'richText' || f.type === 'email') {
 		base.minLength = f.minLength;
 		base.maxLength = f.maxLength;
@@ -79,10 +99,13 @@ function toClientField(f: Field): ClientField {
 
 export function toClientCollection(col: CollectionConfig): ClientCollection {
 	const useAsTitle = col.admin?.useAsTitle ?? (col.auth ? 'email' : 'id');
+	const versionsCfg = typeof col.versions === 'object' ? col.versions : {};
 	return {
 		slug: col.slug,
 		labels: col.labels ?? { singular: labelize(col.slug), plural: labelize(col.slug) },
 		auth: Boolean(col.auth),
+		versioned: Boolean(col.versions),
+		drafts: Boolean(col.versions && (versionsCfg.drafts ?? false)),
 		useAsTitle,
 		defaultColumns:
 			col.admin?.defaultColumns ??
