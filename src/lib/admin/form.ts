@@ -1,0 +1,23 @@
+/** Convert posted FormData into a data object, respecting hasMany fields. */
+import type { CollectionConfig } from '$lib/core/types';
+
+export function formToData(form: FormData, col: CollectionConfig): Record<string, unknown> {
+	const data: Record<string, unknown> = {};
+	for (const field of col.fields) {
+		const hasMany =
+			(field.type === 'select' || field.type === 'relationship') && Boolean(field.hasMany);
+		if (hasMany) {
+			if (form.has(field.name)) {
+				data[field.name] = form.getAll(field.name).map(String).filter(Boolean);
+			}
+			continue;
+		}
+		if (form.has(field.name)) data[field.name] = form.get(field.name);
+	}
+	if (col.auth) {
+		if (form.has('email')) data.email = form.get('email');
+		const pw = form.get('password');
+		if (typeof pw === 'string' && pw.length > 0) data.password = pw;
+	}
+	return data;
+}

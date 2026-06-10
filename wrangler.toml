@@ -1,0 +1,16 @@
+name = "svelte-payload"
+compatibility_date = "2026-06-10"
+compatibility_flags = ["nodejs_compat", "nodejs_als"]
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+# --- D1 (provisioned) --------------------------------------------------------
+# The CMS auto-detects this binding and switches to the D1 adapter.
+[[d1_databases]]
+binding = "DB"
+database_name = "svelte-payload-db"
+database_id = "f1add0ed-4e13-474f-909a-d92efe6d35d3"
+
+# --- R2 (media uploads, future) ----------------------------------------------
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "svelte-payload-files"

@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  /* Payload-inspired dark admin palette */
+  --color-bg: #0b0c0e;
+  --color-elevate: #141518;
+  --color-elevate-2: #1d1f23;
+  --color-border: #2c2e33;
+  --color-fg: #e8e9eb;
+  --color-muted: #8e9095;
+  --color-primary: #c5f74f;
+  --color-primary-fg: #101203;
+  --color-danger: #ef4444;
+  --color-success: #34d399;
+  --radius: 0.5rem;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
