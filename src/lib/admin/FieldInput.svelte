@@ -134,7 +134,7 @@
 				<option value={opt.value} selected={isSelected(value, opt.value)}>{opt.label}</option>
 			{/each}
 		</select>
-	{:else if field.type === 'relationship'}
+	{:else if field.type === 'relationship' || field.type === 'upload'}
 		<select
 			id={field.name}
 			name={field.name}

@@ -144,16 +144,45 @@ interactive editor (add / remove / reorder, per-block fields). Values store as
 `[{ blockType: 'hero', ... }, { blockType: 'quote', ... }]` — see the `pages`
 collection's `layout` field for a working example with four block types.
 
+## Media & uploads
+
+Mark a collection `upload: true` (optionally with `mimeTypes` / `maxFileSize`)
+and its documents carry a stored file with managed `filename`, `mimeType`,
+`filesize`, and `url` fields. Files live on disk in dev (`.data/uploads`) and
+in **R2** in production (uncomment the bucket in `wrangler.toml`), served from
+`/media/<key>` with immutable cache headers. Reference uploads from other
+collections with the `upload` field type — they populate like relationships:
+
+```sh
+curl -b cookies -X POST /api/media -F 'file=@photo.jpg' -F 'alt=A photo'
+```
+
+## Globals
+
+Singletons (site settings, nav, footer) declared under `globals` in the
+config. `GET/POST /api/globals/<slug>`, edited in the admin under their own
+sidebar section, with the same field types and access control as collections.
+
+## Generated TypeScript types
+
+`npm run generate:types` (dev server running) writes `src/generated-types.ts`
+from your config — select fields become literal unions, blocks become
+discriminated unions on `blockType`, relationships/uploads become
+`string | Related`. The Payload `generate:types` experience.
+
 ## Scope: what's in, what's not
 
 Recreated from Payload: config-driven collections, field types (including
-`blocks`), auth collections, access control (boolean + query-constraint), hooks
-(`beforeValidate`, `beforeChange`, `afterChange`, `afterRead`, `beforeDelete`,
-`afterDelete`), unique fields, defaults, validation,
-pagination/filtering/sorting, relationship population with depth, **drafts &
-version history** (save draft / publish / unpublish / restore / prune),
-first-user onboarding, REST + Local APIs, auto-generated admin.
+`blocks` and `upload`), auth collections, access control (boolean +
+query-constraint), hooks (`beforeValidate`, `beforeChange`, `afterChange`,
+`afterRead`, `beforeDelete`, `afterDelete`), unique fields, defaults,
+validation, pagination/filtering/sorting, relationship population with depth,
+**drafts & version history** (save draft / publish / unpublish / restore /
+prune), **media & uploads** (fs/R2 storage adapters, mime/size limits, file
+serving), **globals**, **generated TS types**, a markdown rich-text editor
+with toolbar + preview, first-user onboarding, REST + Local APIs,
+auto-generated admin.
 
-Not recreated (yet): GraphQL, file uploads/media, the Lexical rich-text editor
-(richText is a markdown textarea), localization, jobs/queues, plugins, globals,
-autosave, document locking, scheduled publishing.
+Not recreated (yet): GraphQL, Lexical (rich text is markdown-backed),
+image resizing/focal point, localization, jobs/queues, plugins, autosave,
+document locking, scheduled publishing.

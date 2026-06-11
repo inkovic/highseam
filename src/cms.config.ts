@@ -44,6 +44,26 @@ const users = defineCollection({
 	]
 });
 
+const media = defineCollection({
+	slug: 'media',
+	labels: { singular: 'Media', plural: 'Media' },
+	// Upload collection: docs carry a stored file (fs in dev, R2 in prod) and
+	// get managed filename/mimeType/filesize/url fields.
+	upload: { mimeTypes: ['image/', 'application/pdf'], maxFileSize: 10 * 1024 * 1024 },
+	admin: {
+		useAsTitle: 'filename',
+		defaultColumns: ['filename', 'alt', 'mimeType', 'filesize'],
+		description: 'Images & documents. Reference them via upload fields.'
+	},
+	access: {
+		read: () => true,
+		create: isLoggedIn,
+		update: isLoggedIn,
+		delete: isLoggedIn
+	},
+	fields: [{ name: 'alt', type: 'text', admin: { description: 'Alt text for accessibility' } }]
+});
+
 const categories = defineCollection({
 	slug: 'categories',
 	labels: { singular: 'Category', plural: 'Categories' },
@@ -102,6 +122,7 @@ const posts = defineCollection({
 		{ name: 'content', type: 'richText' },
 		{ name: 'author', type: 'relationship', relationTo: 'users' },
 		{ name: 'category', type: 'relationship', relationTo: 'categories' },
+		{ name: 'coverImage', type: 'upload', relationTo: 'media' },
 		{ name: 'featured', type: 'checkbox', defaultValue: false },
 		{ name: 'publishedAt', type: 'date', admin: { readOnly: true } }
 	]
@@ -183,5 +204,27 @@ const pages = defineCollection({
 
 export default defineConfig({
 	admin: { title: 'svelte-payload' },
-	collections: [users, posts, categories, pages]
+	collections: [users, posts, media, categories, pages],
+	globals: [
+		{
+			slug: 'site-settings',
+			label: 'Site Settings',
+			admin: { description: 'Singleton document — like Payload globals.' },
+			access: { read: () => true, update: isLoggedIn },
+			fields: [
+				{ name: 'siteName', type: 'text', required: true, defaultValue: 'svelte-payload' },
+				{ name: 'tagline', type: 'text' },
+				{ name: 'logo', type: 'upload', relationTo: 'media' },
+				{
+					name: 'nav',
+					type: 'array',
+					fields: [
+						{ name: 'label', type: 'text', required: true },
+						{ name: 'url', type: 'text', required: true }
+					]
+				},
+				{ name: 'footerText', type: 'textarea' }
+			]
+		}
+	]
 });

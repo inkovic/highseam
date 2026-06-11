@@ -35,6 +35,21 @@
 						{col.labels.plural}
 					</a>
 				{/each}
+				{#if data.globals.length > 0}
+					<p class="px-2 pt-4 pb-1 text-[10px] font-semibold tracking-widest text-(--color-muted) uppercase">
+						Globals
+					</p>
+					{#each data.globals as g (g.slug)}
+						<a
+							href="/admin/globals/{g.slug}"
+							class="block rounded-(--radius) px-3 py-2 text-sm transition-colors {isActive(`globals/${g.slug}`)
+								? 'bg-(--color-elevate-2) font-medium text-(--color-primary)'
+								: 'text-(--color-fg) hover:bg-(--color-elevate-2)'}"
+						>
+							{g.label}
+						</a>
+					{/each}
+				{/if}
 			</nav>
 			<div class="border-t border-(--color-border) p-3">
 				<p class="truncate px-2 pb-2 text-xs text-(--color-muted)">{data.user.email}</p>

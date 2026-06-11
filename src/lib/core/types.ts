@@ -31,6 +31,7 @@ export type FieldType =
 	| 'date'
 	| 'select'
 	| 'relationship'
+	| 'upload'
 	| 'array'
 	| 'blocks'
 	| 'json';
@@ -93,6 +94,12 @@ export interface RelationshipField extends BaseField {
 	hasMany?: boolean;
 }
 
+/** Reference to a document in an upload-enabled collection (like Payload). */
+export interface UploadField extends BaseField {
+	type: 'upload';
+	relationTo: string;
+}
+
 export interface ArrayField extends BaseField {
 	type: 'array';
 	/** Sub-fields for each row. */
@@ -129,6 +136,7 @@ export type Field =
 	| DateField
 	| SelectField
 	| RelationshipField
+	| UploadField
 	| ArrayField
 	| BlocksField
 	| JsonField;
@@ -219,6 +227,13 @@ export interface AuthConfig {
 	tokenExpiration?: number;
 }
 
+export interface UploadConfig {
+	/** Allowed mime type prefixes, e.g. ['image/'] or ['image/png', 'application/pdf']. */
+	mimeTypes?: string[];
+	/** Max file size in bytes. Default 10 MiB. */
+	maxFileSize?: number;
+}
+
 export interface VersionsConfig {
 	/** Enable draft state: saves can target a draft without touching the published doc. */
 	drafts?: boolean;
@@ -232,6 +247,11 @@ export interface CollectionConfig {
 	fields: Field[];
 	/** Enable email+password auth for this collection (like Payload). */
 	auth?: boolean | AuthConfig;
+	/**
+	 * Make this an upload collection: documents carry a stored file and get
+	 * managed `filename`, `mimeType`, `filesize`, and `url` fields.
+	 */
+	upload?: boolean | UploadConfig;
 	timestamps?: boolean; // default true
 	/**
 	 * Enable version history (and optionally drafts). Versioned docs get a
@@ -285,6 +305,22 @@ export interface PaginatedDocs {
 }
 
 // ---------------------------------------------------------------------------
+// File storage — the agnostic seam for uploads
+// ---------------------------------------------------------------------------
+
+export interface StoredFile {
+	bytes: Uint8Array;
+	contentType: string;
+}
+
+export interface FileStorage {
+	readonly name: string;
+	put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
+	get(key: string): Promise<StoredFile | null>;
+	delete(key: string): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
 // Database adapter — the agnostic seam
 // ---------------------------------------------------------------------------
 
@@ -303,8 +339,27 @@ export interface DatabaseAdapter {
 // Top-level config
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Globals — singleton documents (site settings, nav, footer), like Payload's
+// ---------------------------------------------------------------------------
+
+export interface GlobalConfig {
+	slug: string;
+	label?: string;
+	fields: Field[];
+	access?: {
+		read?: AccessFn;
+		update?: AccessFn;
+	};
+	admin?: {
+		description?: string;
+		hidden?: boolean;
+	};
+}
+
 export interface CMSConfig {
 	collections: CollectionConfig[];
+	globals?: GlobalConfig[];
 	/** Secret for signing auth tokens. Override via env in production. */
 	secret?: string;
 	admin?: {
