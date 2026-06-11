@@ -85,6 +85,7 @@
 			submitLabel={data.collection.drafts ? 'Publish' : 'Save changes'}
 			action={data.collection.drafts ? '?/publish' : '?/save'}
 			draftAction={data.collection.drafts ? '?/saveDraft' : undefined}
+			autosave={data.collection.drafts}
 		/>
 	</div>
 

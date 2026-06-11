@@ -340,6 +340,9 @@ export class CMS {
 			delete data.password;
 			data._hash = await hashPassword(password);
 			data.email = (data.email as string).toLowerCase();
+			if (typeof col.auth === 'object' && col.auth.apiKeys) {
+				data.apiKey = randomHex(32);
+			}
 		}
 
 		if (this.versionsConfig(col)) {
@@ -603,6 +606,27 @@ export class CMS {
 		return { token, user: this.sanitizeOutput(col, user), exp };
 	}
 
+	/**
+	 * Authenticate an `Authorization: <collection> API-Key <key>` header.
+	 * Returns the user document, or null.
+	 */
+	async authenticateAPIKey(header: string | undefined | null): Promise<Doc | null> {
+		if (!header) return null;
+		const m = header.match(/^(\S+)\s+API-Key\s+(\S+)$/i);
+		if (!m) return null;
+		const [, slug, key] = m;
+		if (!this.hasCollection(slug)) return null;
+		const col = this.collection(slug);
+		if (!col.auth || typeof col.auth !== 'object' || !col.auth.apiKeys) return null;
+
+		await this.init();
+		const { docs } = await this.db.find(slug, { where: { apiKey: { equals: key } }, limit: 1 });
+		if (!docs[0]) return null;
+		const clean = this.sanitizeOutput(col, docs[0]);
+		clean._collection = slug;
+		return clean;
+	}
+
 	/** Resolve a token to its user document, or null. */
 	async authenticate(token: string | undefined | null): Promise<Doc | null> {
 		if (!token) return null;
@@ -677,6 +701,12 @@ export class CMS {
 
 	private async afterRead(req: ReqContext, col: CollectionConfig, doc: Doc, depth: number): Promise<Doc> {
 		let out = this.sanitizeOutput(col, doc);
+		// API keys are secrets: only the user themself (or an admin) may see them.
+		if ('apiKey' in out) {
+			const isSelf = req.user?.id === out.id;
+			const isAdmin = req.user?.role === 'admin';
+			if (!isSelf && !isAdmin) delete out.apiKey;
+		}
 		if (depth > 0) out = await this.populate(req, col, out, depth);
 		for (const hook of col.hooks?.afterRead ?? []) {
 			const result = await hook({ req, operation: 'read', collection: col.slug, doc: out });
@@ -720,6 +750,11 @@ function clamp(n: number, min: number, max: number): number {
 function stripMeta(doc: Doc): Record<string, unknown> {
 	const { id: _i, createdAt: _c, updatedAt: _u, _hash: _h, ...rest } = doc;
 	return rest;
+}
+
+function randomHex(bytes: number): string {
+	const buf = crypto.getRandomValues(new Uint8Array(bytes));
+	return [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export function versionsSlug(slug: string): string {

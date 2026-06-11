@@ -15,7 +15,8 @@
 		submitLabel = 'Save',
 		action = '',
 		draftAction = undefined,
-		draftLabel = 'Save draft'
+		draftLabel = 'Save draft',
+		autosave = false
 	}: {
 		collection: ClientCollection;
 		values?: Record<string, unknown>;
@@ -27,7 +28,34 @@
 		/** When set (drafts-enabled collections), renders a secondary submit posting here. */
 		draftAction?: string;
 		draftLabel?: string;
+		/** Debounced background draft saves while editing (needs draftAction). */
+		autosave?: boolean;
 	} = $props();
+
+	let formEl: HTMLFormElement | undefined = $state();
+	let autosaveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+	let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function scheduleAutosave() {
+		if (!autosave || !draftAction) return;
+		clearTimeout(autosaveTimer);
+		autosaveTimer = setTimeout(runAutosave, 2000);
+	}
+
+	async function runAutosave() {
+		if (!formEl || !draftAction) return;
+		autosaveState = 'saving';
+		try {
+			const res = await fetch(draftAction, {
+				method: 'POST',
+				body: new FormData(formEl),
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			autosaveState = res.ok ? 'saved' : 'error';
+		} catch {
+			autosaveState = 'error';
+		}
+	}
 
 	const visibleFields = $derived(collection.fields.filter((f) => !f.admin.hidden));
 	const inputClass =
@@ -40,6 +68,8 @@
 	{action}
 	enctype={collection.upload ? 'multipart/form-data' : undefined}
 	use:enhance
+	bind:this={formEl}
+	oninput={scheduleAutosave}
 	class="max-w-2xl space-y-5"
 >
 	{#if collection.upload}
@@ -126,5 +156,10 @@
 			</button>
 		{/if}
 		<a href="/admin/{collection.slug}" class="text-sm text-(--color-muted) hover:text-(--color-fg)">Cancel</a>
+		{#if autosave && autosaveState !== 'idle'}
+			<span class="ml-auto text-xs {autosaveState === 'error' ? 'text-(--color-danger)' : 'text-(--color-muted)'}">
+				{autosaveState === 'saving' ? 'Autosaving…' : autosaveState === 'saved' ? 'Draft autosaved' : 'Autosave failed'}
+			</span>
+		{/if}
 	</div>
 </form>

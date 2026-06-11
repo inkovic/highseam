@@ -29,6 +29,7 @@
 		"wrangler": "^4.99.0"
 	},
 	"dependencies": {
-		"@lucide/svelte": "^1.17.0"
+		"@lucide/svelte": "^1.17.0",
+		"graphql": "^16.14.2"
 	}
 }
