@@ -5,6 +5,7 @@
  */
 import { defineCollection, defineConfig } from '$lib/core';
 import type { AccessFn } from '$lib/core';
+import { lastModifiedBy } from '$lib/plugins/last-modified-by';
 
 const isAdmin: AccessFn = ({ req }) => req.user?.role === 'admin';
 const isLoggedIn: AccessFn = ({ req }) => Boolean(req.user);
@@ -20,7 +21,9 @@ const publishedOrLoggedIn: AccessFn = ({ req }) =>
 
 const users = defineCollection({
 	slug: 'users',
-	auth: true,
+	// apiKeys: each user gets a key; authenticate with
+	// `Authorization: users API-Key <key>`
+	auth: { apiKeys: true },
 	labels: { singular: 'User', plural: 'Users' },
 	admin: { useAsTitle: 'email', defaultColumns: ['email', 'name', 'role'] },
 	access: {
@@ -204,6 +207,7 @@ const pages = defineCollection({
 
 export default defineConfig({
 	admin: { title: 'svelte-payload' },
+	plugins: [lastModifiedBy(['posts', 'pages'])],
 	collections: [users, posts, media, categories, pages],
 	globals: [
 		{

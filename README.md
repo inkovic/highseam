@@ -170,6 +170,38 @@ from your config — select fields become literal unions, blocks become
 discriminated unions on `blockType`, relationships/uploads become
 `string | Related`. The Payload `generate:types` experience.
 
+## GraphQL
+
+`POST /api/graphql` with an auto-generated schema: per-collection queries
+(`Posts(where, limit, page, sort)`, `Post(id, draft)`), mutations
+(`createPost`, `updatePost`, `deletePost`, `publishPost`, `unpublishPost`),
+globals, `login`, and `me`. Relationship fields resolve lazily, so query depth
+follows your GraphQL selection set. Same access control as REST.
+
+```graphql
+{ Posts { docs { title category { title } author { email } } } }
+```
+
+## Plugins
+
+Payload-style: a plugin is a config transform, applied in order by
+`defineConfig`. See `src/lib/plugins/last-modified-by.ts` — it injects a
+read-only field plus a `beforeChange` hook into chosen collections.
+
+## API keys
+
+`auth: { apiKeys: true }` issues each user a key at creation (visible only to
+themselves and admins). Authenticate any REST or GraphQL call with:
+
+```
+Authorization: users API-Key <key>
+```
+
+## Autosave
+
+Drafts-enabled collections autosave in the admin: edits debounce into
+background draft saves (published doc untouched), with a status indicator.
+
 ## Scope: what's in, what's not
 
 Recreated from Payload: config-driven collections, field types (including
@@ -179,10 +211,10 @@ query-constraint), hooks (`beforeValidate`, `beforeChange`, `afterChange`,
 validation, pagination/filtering/sorting, relationship population with depth,
 **drafts & version history** (save draft / publish / unpublish / restore /
 prune), **media & uploads** (fs/R2 storage adapters, mime/size limits, file
-serving), **globals**, **generated TS types**, a markdown rich-text editor
-with toolbar + preview, first-user onboarding, REST + Local APIs,
-auto-generated admin.
+serving), **globals**, **generated TS types**, **GraphQL**, **plugins**,
+**API keys**, **autosave**, a markdown rich-text editor with toolbar +
+preview, first-user onboarding, REST + Local APIs, auto-generated admin.
 
-Not recreated (yet): GraphQL, Lexical (rich text is markdown-backed),
-image resizing/focal point, localization, jobs/queues, plugins, autosave,
-document locking, scheduled publishing.
+Not recreated (yet): Lexical (rich text is markdown-backed), image
+resizing/focal point, localization, jobs/queues, document locking,
+scheduled publishing, email flows (verification / forgot-password).

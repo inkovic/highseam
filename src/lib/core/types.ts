@@ -225,6 +225,11 @@ export interface CollectionAdminConfig {
 export interface AuthConfig {
 	/** Seconds until tokens expire. Default 7200 (2h). */
 	tokenExpiration?: number;
+	/**
+	 * Issue each user an API key (generated at create). Authenticate with:
+	 * `Authorization: <collection-slug> API-Key <key>`
+	 */
+	apiKeys?: boolean;
 }
 
 export interface UploadConfig {
@@ -357,9 +362,17 @@ export interface GlobalConfig {
 	};
 }
 
+/**
+ * A plugin is a config transform, exactly like Payload: it receives the
+ * config and returns a (possibly) modified one. Applied in order by
+ * defineConfig.
+ */
+export type Plugin = (config: CMSConfig) => CMSConfig;
+
 export interface CMSConfig {
 	collections: CollectionConfig[];
 	globals?: GlobalConfig[];
+	plugins?: Plugin[];
 	/** Secret for signing auth tokens. Override via env in production. */
 	secret?: string;
 	admin?: {
