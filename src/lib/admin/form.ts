@@ -24,5 +24,11 @@ export function formToData(form: FormData, col: CollectionConfig): Record<string
 		const pw = form.get('password');
 		if (typeof pw === 'string' && pw.length > 0) data.password = pw;
 	}
+	if (col.upload) {
+		const file = form.get('file');
+		if (file && typeof file === 'object' && 'size' in file && (file as File).size > 0) {
+			data.file = file;
+		}
+	}
 	return data;
 }

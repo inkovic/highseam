@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "wrangler pages dev .svelte-kit/cloudflare",
 		"deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare",
+		"generate:types": "curl -s -X POST http://localhost:5173/api/generate-types",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"

@@ -43,6 +43,8 @@ export interface ClientCollection {
 	hidden: boolean;
 	versioned: boolean;
 	drafts: boolean;
+	upload: boolean;
+	uploadAccept?: string;
 	fields: ClientField[];
 }
 
@@ -76,6 +78,7 @@ function toClientField(f: Field): ClientField {
 		base.relationTo = f.relationTo;
 		base.hasMany = f.hasMany;
 	}
+	if (f.type === 'upload') base.relationTo = f.relationTo;
 	if (f.type === 'array') base.fields = f.fields.map(toClientField);
 	if (f.type === 'blocks') {
 		base.blocks = f.blocks.map((b) => ({
@@ -106,6 +109,11 @@ export function toClientCollection(col: CollectionConfig): ClientCollection {
 		auth: Boolean(col.auth),
 		versioned: Boolean(col.versions),
 		drafts: Boolean(col.versions && (versionsCfg.drafts ?? false)),
+		upload: Boolean(col.upload),
+		uploadAccept:
+			typeof col.upload === 'object' && col.upload.mimeTypes
+				? col.upload.mimeTypes.map((m) => (m.endsWith('/') ? `${m}*` : m)).join(',')
+				: undefined,
 		useAsTitle,
 		defaultColumns:
 			col.admin?.defaultColumns ??
@@ -115,6 +123,27 @@ export function toClientCollection(col: CollectionConfig): ClientCollection {
 		description: col.admin?.description,
 		hidden: Boolean(col.admin?.hidden),
 		fields: col.fields.map(toClientField)
+	};
+}
+
+/**
+ * Globals reuse the collection form machinery: synthesize a ClientCollection
+ * whose slug routes back to /admin/globals/<slug>.
+ */
+export function toClientGlobal(g: import('$lib/core/types').GlobalConfig): ClientCollection {
+	const label = g.label ?? labelize(g.slug);
+	return {
+		slug: `globals/${g.slug}`,
+		labels: { singular: label, plural: label },
+		auth: false,
+		useAsTitle: 'id',
+		defaultColumns: [],
+		description: g.admin?.description,
+		hidden: Boolean(g.admin?.hidden),
+		versioned: false,
+		drafts: false,
+		upload: false,
+		fields: g.fields.map(toClientField)
 	};
 }
 

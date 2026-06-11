@@ -13,7 +13,10 @@ import type {
 	CollectionConfig,
 	DatabaseAdapter,
 	Doc,
+	FileStorage,
 	FindArgs,
+	GlobalConfig,
+	UploadConfig,
 	PaginatedDocs,
 	ReqContext,
 	VersionDoc,
@@ -42,11 +45,13 @@ const defaultAccess: AccessFn = ({ req }) => Boolean(req.user);
 export class CMS {
 	readonly config: CMSConfig;
 	readonly db: DatabaseAdapter;
+	readonly storage?: FileStorage;
 	private initialized = false;
 
-	constructor(config: CMSConfig, db: DatabaseAdapter) {
+	constructor(config: CMSConfig, db: DatabaseAdapter, storage?: FileStorage) {
 		this.config = config;
 		this.db = db;
+		this.storage = storage;
 	}
 
 	get secret(): string {
@@ -73,8 +78,72 @@ export class CMS {
 		const versionStores = this.config.collections
 			.filter((c) => c.versions)
 			.map((c) => versionsSlug(c.slug));
-		await this.db.init([...slugs, ...versionStores]);
+		const globalStores = (this.config.globals ?? []).map((g) => globalsSlug(g.slug));
+		await this.db.init([...slugs, ...versionStores, ...globalStores]);
 		this.initialized = true;
+	}
+
+	// -------------------------------------------------------------------------
+	// Globals
+	// -------------------------------------------------------------------------
+
+	get globals(): GlobalConfig[] {
+		return this.config.globals ?? [];
+	}
+
+	global(slug: string): GlobalConfig {
+		const g = this.globals.find((g) => g.slug === slug);
+		if (!g) throw new APIError(`Unknown global: ${slug}`, 404);
+		return g;
+	}
+
+	hasGlobal(slug: string): boolean {
+		return this.globals.some((g) => g.slug === slug);
+	}
+
+	/** Pseudo collection config so globals reuse field validation/sanitization. */
+	private globalAsCollection(g: GlobalConfig): CollectionConfig {
+		return { slug: g.slug, fields: g.fields };
+	}
+
+	async findGlobal(req: ReqContext, slug: string, opts: OperationOptions = {}): Promise<Doc> {
+		await this.init();
+		const g = this.global(slug);
+
+		if (!opts.overrideAccess) {
+			const allowed = await (g.access?.read ?? defaultAccess)({ req });
+			if (allowed !== true && typeof allowed !== 'object') throw new APIError('Forbidden', 403);
+		}
+
+		const { docs } = await this.db.find(globalsSlug(slug), { limit: 1 });
+		const doc = docs[0] ?? ({ id: slug } as Doc);
+		return this.populate(req, this.globalAsCollection(g), doc, opts.depth ?? 1);
+	}
+
+	async updateGlobal(
+		req: ReqContext,
+		slug: string,
+		input: Record<string, unknown>,
+		opts: OperationOptions = {}
+	): Promise<Doc> {
+		await this.init();
+		const g = this.global(slug);
+
+		if (!opts.overrideAccess) {
+			const allowed = await (g.access?.update ?? defaultAccess)({ req, data: input });
+			if (allowed !== true && typeof allowed !== 'object') throw new APIError('Forbidden', 403);
+		}
+
+		const pseudo = this.globalAsCollection(g);
+		const data = applyDefaults(pseudo, sanitizeData(pseudo, input));
+		validateData(pseudo, data);
+
+		const store = globalsSlug(slug);
+		const { docs } = await this.db.find(store, { limit: 1 });
+		const doc = docs[0]
+			? await this.db.update(store, docs[0].id, data)
+			: await this.db.create(store, data);
+		return this.populate(req, pseudo, doc, opts.depth ?? 1);
 	}
 
 	// -------------------------------------------------------------------------
@@ -198,6 +267,48 @@ export class CMS {
 	// Write
 	// -------------------------------------------------------------------------
 
+	// -------------------------------------------------------------------------
+	// Uploads
+	// -------------------------------------------------------------------------
+
+	uploadConfig(col: CollectionConfig): UploadConfig | null {
+		if (!col.upload) return null;
+		return typeof col.upload === 'object' ? col.upload : {};
+	}
+
+	private isFile(v: unknown): v is File {
+		return (
+			typeof v === 'object' &&
+			v !== null &&
+			typeof (v as File).arrayBuffer === 'function' &&
+			typeof (v as File).name === 'string'
+		);
+	}
+
+	/** Store an uploaded file and return the managed file fields. */
+	private async storeFile(col: CollectionConfig, file: File): Promise<Record<string, unknown>> {
+		const cfg = this.uploadConfig(col)!;
+		if (!this.storage) throw new APIError('No file storage configured', 500);
+
+		const max = cfg.maxFileSize ?? 10 * 1024 * 1024;
+		if (file.size > max) throw new APIError(`File too large (max ${max} bytes)`, 413);
+		const type = file.type || 'application/octet-stream';
+		if (cfg.mimeTypes && !cfg.mimeTypes.some((m) => type.startsWith(m)))
+			throw new APIError(`Unsupported file type: ${type}`, 415);
+
+		const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-120) || 'file';
+		const key = `${crypto.randomUUID()}/${safeName}`;
+		await this.storage.put(key, new Uint8Array(await file.arrayBuffer()), type);
+
+		return {
+			filename: safeName,
+			mimeType: type,
+			filesize: file.size,
+			storageKey: key,
+			url: `/media/${key}`
+		};
+	}
+
 	async create(
 		req: ReqContext,
 		slug: string,
@@ -207,11 +318,17 @@ export class CMS {
 		await this.init();
 		const col = this.collection(slug);
 
+		const file = this.uploadConfig(col) && this.isFile(input.file) ? input.file : null;
 		let data = applyDefaults(col, sanitizeData(col, input));
 
 		if (!opts.overrideAccess) {
 			const access = await this.evalAccess(col, 'create', { req, data });
 			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+
+		if (this.uploadConfig(col)) {
+			if (!file) throw new APIError('A file is required (multipart field "file")', 400);
+			Object.assign(data, await this.storeFile(col, file));
 		}
 
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'create', data);
@@ -251,6 +368,7 @@ export class CMS {
 		const originalDoc = await this.db.findById(slug, id);
 		if (!originalDoc) throw new APIError('Not found', 404);
 
+		const file = this.uploadConfig(col) && this.isFile(input.file) ? input.file : null;
 		let data = sanitizeData(col, input);
 
 		if (!opts.overrideAccess) {
@@ -258,6 +376,14 @@ export class CMS {
 			if (!access.allowed) throw new APIError('Forbidden', 403);
 			if (access.where && !matchesWhere(originalDoc, access.where))
 				throw new APIError('Forbidden', 403);
+		}
+
+		// Replacement file: store new, remove old.
+		if (file) {
+			Object.assign(data, await this.storeFile(col, file));
+			if (typeof originalDoc.storageKey === 'string' && this.storage) {
+				await this.storage.delete(originalDoc.storageKey).catch(() => {});
+			}
 		}
 
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, originalDoc);
@@ -437,6 +563,11 @@ export class CMS {
 
 		await this.db.delete(slug, id);
 
+		// Upload collections: remove the stored file too.
+		if (this.uploadConfig(col) && typeof doc.storageKey === 'string' && this.storage) {
+			await this.storage.delete(doc.storageKey).catch(() => {});
+		}
+
 		for (const hook of col.hooks?.afterDelete ?? [])
 			await hook({ req, operation: 'delete', collection: slug, doc });
 	}
@@ -558,7 +689,7 @@ export class CMS {
 	private async populate(req: ReqContext, col: CollectionConfig, doc: Doc, depth: number): Promise<Doc> {
 		const out = { ...doc };
 		for (const field of col.fields) {
-			if (field.type !== 'relationship') continue;
+			if (field.type !== 'relationship' && field.type !== 'upload') continue;
 			const value = out[field.name];
 			if (value == null) continue;
 			if (!this.hasCollection(field.relationTo)) continue;
@@ -573,7 +704,8 @@ export class CMS {
 				}
 			};
 
-			out[field.name] = field.hasMany
+			const hasMany = field.type === 'relationship' && Boolean(field.hasMany);
+			out[field.name] = hasMany
 				? await Promise.all((Array.isArray(value) ? value : [value]).map(resolve))
 				: await resolve(value);
 		}
@@ -592,6 +724,10 @@ function stripMeta(doc: Doc): Record<string, unknown> {
 
 export function versionsSlug(slug: string): string {
 	return `_versions_${slug}`;
+}
+
+export function globalsSlug(slug: string): string {
+	return `_global_${slug}`;
 }
 
 export { APIError };

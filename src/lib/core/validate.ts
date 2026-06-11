@@ -52,6 +52,9 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			for (const id of ids) if (typeof id !== 'string') return 'Invalid relationship id';
 			break;
 		}
+		case 'upload':
+			if (typeof value !== 'string') return 'Invalid upload reference';
+			break;
 		case 'array': {
 			if (!Array.isArray(value)) return 'Must be an array';
 			for (const row of value) {
@@ -155,6 +158,8 @@ function coerce(field: Field, value: unknown): unknown {
 			return typeof value === 'string' ? (value === '' ? null : Number(value)) : value;
 		case 'checkbox':
 			return value === 'on' || value === 'true' || value === true;
+		case 'upload':
+			return value;
 		case 'select':
 		case 'relationship':
 			if (field.hasMany && typeof value === 'string') {

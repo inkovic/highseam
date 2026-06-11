@@ -1,7 +1,7 @@
 /**
  * SvelteKit-side wiring. This is the ONLY layer that knows about the runtime:
- * - Cloudflare Workers (D1 binding present)  -> D1Adapter
- * - Node dev server                          -> MemoryAdapter persisted to .data/db.json
+ * - Cloudflare Workers (D1/R2 bindings)  -> D1Adapter + R2Storage
+ * - Node dev server                      -> MemoryAdapter (.data/db.json) + fs storage (.data/uploads)
  */
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
@@ -9,7 +9,8 @@ import cmsConfig from '../../cms.config';
 import { CMS } from '$lib/core/cms';
 import { D1Adapter } from '$lib/core/adapters/d1';
 import { MemoryAdapter } from '$lib/core/adapters/memory';
-import type { DatabaseAdapter, Doc } from '$lib/core/types';
+import { R2Storage } from '$lib/core/adapters/r2';
+import type { DatabaseAdapter, Doc, FileStorage, StoredFile } from '$lib/core/types';
 
 let nodeCms: CMS | null = null;
 
@@ -32,12 +33,48 @@ function nodeFileAdapter(): DatabaseAdapter {
 	});
 }
 
+/** Filesystem storage for dev: files under .data/uploads/<key>. */
+class FsStorage implements FileStorage {
+	readonly name = 'fs';
+	private base = '.data/uploads';
+
+	async put(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+		const fs = await import('node:fs/promises');
+		const path = `${this.base}/${key}`;
+		await fs.mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+		await fs.writeFile(path, bytes);
+		await fs.writeFile(`${path}.meta`, contentType);
+	}
+
+	async get(key: string): Promise<StoredFile | null> {
+		if (key.includes('..')) return null;
+		try {
+			const fs = await import('node:fs/promises');
+			const bytes = new Uint8Array(await fs.readFile(`${this.base}/${key}`));
+			const contentType = await fs
+				.readFile(`${this.base}/${key}.meta`, 'utf-8')
+				.catch(() => 'application/octet-stream');
+			return { bytes, contentType };
+		} catch {
+			return null;
+		}
+	}
+
+	async delete(key: string): Promise<void> {
+		if (key.includes('..')) return;
+		const fs = await import('node:fs/promises');
+		await fs.rm(`${this.base}/${key}`, { force: true });
+		await fs.rm(`${this.base}/${key}.meta`, { force: true });
+	}
+}
+
 export function getCMS(platform?: App.Platform): CMS {
 	const secret = platform?.env?.CMS_SECRET ?? env.CMS_SECRET ?? cmsConfig.secret;
 
 	// Production on Cloudflare: a fresh, stateless CMS over the D1 binding.
 	if (platform?.env?.DB) {
-		return new CMS({ ...cmsConfig, secret }, new D1Adapter(platform.env.DB));
+		const storage = platform.env.BUCKET ? new R2Storage(platform.env.BUCKET) : undefined;
+		return new CMS({ ...cmsConfig, secret }, new D1Adapter(platform.env.DB), storage);
 	}
 
 	// Dev / Node: a singleton over the JSON-file store.
@@ -47,7 +84,7 @@ export function getCMS(platform?: App.Platform): CMS {
 				'[svelte-payload] No D1 binding found in production — falling back to ephemeral in-memory storage.'
 			);
 		}
-		nodeCms = new CMS({ ...cmsConfig, secret }, nodeFileAdapter());
+		nodeCms = new CMS({ ...cmsConfig, secret }, nodeFileAdapter(), new FsStorage());
 	}
 	return nodeCms;
 }

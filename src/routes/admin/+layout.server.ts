@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
-import { toClientCollection } from '$lib/admin/client';
+import { toClientCollection, labelize } from '$lib/admin/client';
 
 const PUBLIC_ADMIN_ROUTES = ['/admin/login', '/admin/create-first-user'];
 
@@ -19,6 +19,9 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	return {
 		user,
 		title: cms.config.admin?.title ?? 'svelte-payload',
-		collections: cms.collections.filter((c) => !c.admin?.hidden).map(toClientCollection)
+		collections: cms.collections.filter((c) => !c.admin?.hidden).map(toClientCollection),
+		globals: cms.globals
+			.filter((g) => !g.admin?.hidden)
+			.map((g) => ({ slug: g.slug, label: g.label ?? labelize(g.slug) }))
 	};
 };

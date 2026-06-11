@@ -10,7 +10,7 @@ export interface RelOption {
 /** Collect every collection slug referenced by relationship fields, recursively. */
 function collectRelationTargets(fields: Field[], out: Set<string>): void {
 	for (const field of fields) {
-		if (field.type === 'relationship') out.add(field.relationTo);
+		if (field.type === 'relationship' || field.type === 'upload') out.add(field.relationTo);
 		if (field.type === 'array') collectRelationTargets(field.fields, out);
 		if (field.type === 'blocks')
 			for (const block of field.blocks) collectRelationTargets(block.fields, out);

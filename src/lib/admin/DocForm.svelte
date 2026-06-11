@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import BlocksInput from './BlocksInput.svelte';
 	import FieldInput from './FieldInput.svelte';
+	import RichTextInput from './RichTextInput.svelte';
 	import type { ClientCollection } from './client';
 	import type { RelOption } from './server';
 
@@ -34,7 +35,45 @@
 	const isEdit = $derived(Boolean(values.id));
 </script>
 
-<form method="POST" {action} use:enhance class="max-w-2xl space-y-5">
+<form
+	method="POST"
+	{action}
+	enctype={collection.upload ? 'multipart/form-data' : undefined}
+	use:enhance
+	class="max-w-2xl space-y-5"
+>
+	{#if collection.upload}
+		<div class="space-y-2">
+			{#if typeof values.url === 'string'}
+				{#if String(values.mimeType ?? '').startsWith('image/')}
+					<img
+						src={values.url}
+						alt={String(values.filename ?? 'upload')}
+						class="max-h-56 rounded-(--radius) border border-(--color-border)"
+					/>
+				{/if}
+				<p class="text-xs text-(--color-muted)">
+					{values.filename} · {values.mimeType} · {Math.round(Number(values.filesize ?? 0) / 1024)} KB
+					— <a href={String(values.url)} target="_blank" rel="noopener" class="text-(--color-primary) hover:underline">open</a>
+				</p>
+			{/if}
+			<div class="space-y-1.5">
+				<label class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase" for="file">
+					File {#if !isEdit}<span class="text-(--color-primary)">*</span>{/if}
+				</label>
+				<input
+					id="file"
+					name="file"
+					type="file"
+					accept={collection.uploadAccept}
+					class="block w-full text-sm text-(--color-muted) file:mr-3 file:rounded-(--radius) file:border-0 file:bg-(--color-primary) file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-(--color-primary-fg)"
+				/>
+				{#if isEdit}
+					<p class="text-xs text-(--color-muted)">Leave empty to keep the current file</p>
+				{/if}
+			</div>
+		</div>
+	{/if}
 	{#if collection.auth}
 		<div class="space-y-1.5">
 			<label class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase" for="email">
@@ -61,6 +100,9 @@
 	{#each visibleFields as field (field.name)}
 		{#if field.type === 'blocks' || field.type === 'array'}
 			<BlocksInput {field} value={values[field.name]} {relOptions} />
+			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
+		{:else if field.type === 'richText'}
+			<RichTextInput {field} value={values[field.name]} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else}
 			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />
