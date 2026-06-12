@@ -5,12 +5,11 @@
  */
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import cmsConfig from '../../cms.config';
 import { CMS } from '$lib/core/cms';
 import { D1Adapter } from '$lib/core/adapters/d1';
 import { MemoryAdapter } from '$lib/core/adapters/memory';
 import { R2Storage } from '$lib/core/adapters/r2';
-import type { DatabaseAdapter, Doc, FileStorage, StoredFile } from '$lib/core/types';
+import type { CMSConfig, DatabaseAdapter, Doc, FileStorage, StoredFile } from '$lib/core/types';
 
 let nodeCms: CMS | null = null;
 
@@ -68,7 +67,7 @@ class FsStorage implements FileStorage {
 	}
 }
 
-export function getCMS(platform?: App.Platform): CMS {
+export function getCMS(cmsConfig: CMSConfig, platform?: App.Platform): CMS {
 	const secret = platform?.env?.CMS_SECRET ?? env.CMS_SECRET ?? cmsConfig.secret;
 
 	// Production on Cloudflare: a fresh, stateless CMS over the D1 binding.
@@ -96,4 +95,35 @@ export async function getUserFromCookies(
 	cookies: { get(name: string): string | undefined }
 ): Promise<Doc | null> {
 	return cms.authenticate(cookies.get(TOKEN_COOKIE));
+}
+
+/**
+ * Drop-in SvelteKit handle: attaches `locals.cms` and `locals.user`
+ * (API-key header first, then session cookie).
+ *
+ *   // src/hooks.server.ts
+ *   import { createCMSHandle } from 'svelte-payload/server';
+ *   import cmsConfig from './cms.config';
+ *   export const handle = createCMSHandle(cmsConfig);
+ */
+export function createCMSHandle(cmsConfig: CMSConfig) {
+	return async ({
+		event,
+		resolve
+	}: {
+		event: {
+			locals: { cms: CMS; user: Doc | null };
+			platform?: App.Platform;
+			request: Request;
+			cookies: { get(name: string): string | undefined };
+		};
+		resolve: (event: never) => Promise<Response> | Response;
+	}) => {
+		const cms = getCMS(cmsConfig, event.platform);
+		event.locals.cms = cms;
+		event.locals.user =
+			(await cms.authenticateAPIKey(event.request.headers.get('authorization'))) ??
+			(await getUserFromCookies(cms, event.cookies));
+		return resolve(event as never);
+	};
 }

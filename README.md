@@ -7,7 +7,28 @@ faithful recreation of Payload's *architecture*: one config file in, three thing
 (database presence, REST API, admin panel). The engine is framework-agnostic where it
 counts, so the same core runs on Node and Cloudflare Workers.
 
-## Quick start
+## Use it in your own SvelteKit app
+
+svelte-payload is a package. From this repo:
+
+```sh
+npm run package && npm pack        # → svelte-payload-0.1.0.tgz
+```
+
+Then in any SvelteKit project (Tailwind v4 assumed):
+
+```sh
+npm i ../path/to/svelte-payload-0.1.0.tgz
+npx svelte-payload-init            # scaffolds routes, hooks, cms.config.ts, theme
+# import '../svelte-payload.css' once in your root layout, then:
+npm run dev                        # → /admin, create the first user
+```
+
+The scaffolder copies thin route stubs (REST + GraphQL + admin + media) that
+import from the package — delete what you don't need, customize what you do.
+Everything is driven by your `src/cms.config.ts`.
+
+## Quick start (this repo — the demo app)
 
 ```sh
 npm install
