@@ -23,6 +23,7 @@ function fieldType(f: Field, relNames: Map<string, string>): string {
 	switch (f.type) {
 		case 'text':
 		case 'textarea':
+		case 'html':
 		case 'email':
 		case 'date':
 			return 'string';

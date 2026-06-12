@@ -137,6 +137,36 @@ npm run deploy
 
 Set a strong `CMS_SECRET` (Pages env var). The CMS auto-detects the D1 binding.
 
+## Table-backed collections (sit on top of an existing database)
+
+The D1 adapter has two modes. Default is schema-less JSON documents; add
+`table` to a collection and it maps onto an **existing SQL table**, one
+column per field (the Directus model) — your pipeline-owned relational data
+gets the same admin, REST, and GraphQL as everything else:
+
+```ts
+const venues = defineCollection({
+  slug: 'venues',
+  table: { name: 'venues', autoId: true,
+           timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
+  fields: [/* names must match column names */]
+});
+```
+
+Where/sort compile to plain SQL, checkbox fields marshal to 0/1, and
+array/blocks/json/richText fields marshal to JSON text columns. Integer
+autoincrement and uuid ids both supported; timestamps optional. (Drafts
+require a `_status` column; localized fields and upload collections aren't
+supported in table mode.) In dev the collection runs on the JSON store.
+
+## HTML fields
+
+`type: 'html'` stores a sanitized HTML string — built for content produced
+as HTML by external pipelines (AI writers, migrations). Server-side
+sanitizer strips scripts/styles/event handlers and unsafe URLs on every
+write; the admin edits it with a WYSIWYG (visual + HTML source modes). Use
+alongside structured `richText`, each where it fits.
+
 ## Drafts & versions
 
 Add `versions: { drafts: true }` to a collection and it gets a managed

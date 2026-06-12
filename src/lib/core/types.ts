@@ -24,7 +24,8 @@ export interface Doc {
 export type FieldType =
 	| 'text'
 	| 'textarea'
-	| 'richText' // markdown-backed in this implementation
+	| 'richText' // structured JSON nodes (Lexical-equivalent)
+	| 'html' // sanitized HTML string (WYSIWYG-edited)
 	| 'email'
 	| 'number'
 	| 'checkbox'
@@ -79,6 +80,16 @@ export interface TextField extends BaseField {
  * embeddable typed components, uploads, and relationships INSIDE the
  * document flow. Legacy markdown strings are still accepted.
  */
+/**
+ * Sanitized HTML stored as a string — for content produced as HTML by
+ * external pipelines (AI writers, migrations) or edited via WYSIWYG.
+ * Coexists with `richText` (structured JSON): use each where it fits.
+ */
+export interface HtmlField extends BaseField {
+	type: 'html';
+	maxLength?: number;
+}
+
 export interface RichTextField extends BaseField {
 	type: 'richText';
 	/** Typed components editors can embed inside the document. */
@@ -154,6 +165,7 @@ export interface JsonField extends BaseField {
 export type Field =
 	| TextField
 	| RichTextField
+	| HtmlField
 	| NumberField
 	| CheckboxField
 	| DateField
@@ -255,6 +267,25 @@ export interface AuthConfig {
 	apiKeys?: boolean;
 }
 
+/**
+ * Map a collection onto an EXISTING SQL table (D1), one column per field —
+ * the Directus model. Lets the admin/API sit on top of relational data
+ * (e.g. a pipeline-fed venues table) without migrating it to JSON docs.
+ * Field names must match column names. In dev (memory adapter) the
+ * collection behaves like a normal JSON collection.
+ *
+ * Notes: versions/drafts require a `_status` column if enabled; localized
+ * fields and upload collections are not supported in table mode.
+ */
+export interface TableConfig {
+	/** SQL table name. */
+	name: string;
+	/** id column is INTEGER AUTOINCREMENT (omit on insert, read back). Default: uuid TEXT ids. */
+	autoId?: boolean;
+	/** Timestamp column names, or false if the table has none. Default false. */
+	timestamps?: { createdAt: string; updatedAt: string } | false;
+}
+
 export interface UploadConfig {
 	/** Allowed mime type prefixes, e.g. ['image/'] or ['image/png', 'application/pdf']. */
 	mimeTypes?: string[];
@@ -286,6 +317,8 @@ export interface CollectionConfig {
 	 * managed `filename`, `mimeType`, `filesize`, and `url` fields.
 	 */
 	upload?: boolean | UploadConfig;
+	/** Back this collection with an existing SQL table (string = table name). */
+	table?: string | TableConfig;
 	timestamps?: boolean; // default true
 	/**
 	 * Enable version history (and optionally drafts). Versioned docs get a
@@ -358,10 +391,27 @@ export interface FileStorage {
 // Database adapter — the agnostic seam
 // ---------------------------------------------------------------------------
 
+/** Per-store metadata handed to adapters at init. */
+export interface AdapterStoreInfo {
+	slug: string;
+	/** Present for table-backed collections (D1 column-per-field mode). */
+	table?: {
+		name: string;
+		autoId: boolean;
+		timestamps: { createdAt: string; updatedAt: string } | false;
+		/** Columns holding JSON (array/blocks/json/richText fields). */
+		jsonColumns: string[];
+		/** Columns holding booleans (checkbox fields). */
+		boolColumns: string[];
+		/** All known field columns (insert/update whitelist). */
+		columns: string[];
+	};
+}
+
 export interface DatabaseAdapter {
 	readonly name: string;
-	/** Called once with all collection slugs before first use. */
-	init(collections: string[]): Promise<void>;
+	/** Called once with all stores before first use. */
+	init(collections: AdapterStoreInfo[]): Promise<void>;
 	find(collection: string, args: FindArgs): Promise<{ docs: Doc[]; totalDocs: number }>;
 	findById(collection: string, id: string): Promise<Doc | null>;
 	create(collection: string, data: Record<string, unknown>): Promise<Doc>;

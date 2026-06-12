@@ -4,7 +4,14 @@
  * platform-agnostic — pass `load`/`save` backed by fs on Node, or nothing
  * for ephemeral in-memory use (tests).
  */
-import type { DatabaseAdapter, Doc, FindArgs, Where, WhereOperators } from '../types';
+import type {
+	AdapterStoreInfo,
+	DatabaseAdapter,
+	Doc,
+	FindArgs,
+	Where,
+	WhereOperators
+} from '../types';
 
 type Store = Record<string, Doc[]>;
 
@@ -86,13 +93,15 @@ export class MemoryAdapter implements DatabaseAdapter {
 
 	constructor(private opts: MemoryAdapterOptions = {}) {}
 
-	async init(collections: string[]): Promise<void> {
+	async init(collections: AdapterStoreInfo[]): Promise<void> {
 		if (!this.loaded && this.opts.load) {
 			const persisted = await this.opts.load();
 			if (persisted) this.store = persisted;
 			this.loaded = true;
 		}
-		for (const slug of collections) this.store[slug] ??= [];
+		// Table configs are ignored in dev: table-backed collections behave
+		// like normal JSON collections against the memory store.
+		for (const { slug } of collections) this.store[slug] ??= [];
 	}
 
 	private async persist(): Promise<void> {

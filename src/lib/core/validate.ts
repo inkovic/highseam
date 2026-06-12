@@ -1,6 +1,6 @@
 import type { CollectionConfig, Field } from './types';
 import { ValidationError } from './types';
-import { sanitizeNodes, validateRichTextNodes } from './richtext';
+import { sanitizeDocumentHtml, sanitizeNodes, validateRichTextNodes } from './richtext';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -23,6 +23,12 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			if (typeof value !== 'string') return 'Must be a string';
 			if (field.minLength && value.length < field.minLength)
 				return `Must be at least ${field.minLength} characters`;
+			if (field.maxLength && value.length > field.maxLength)
+				return `Must be at most ${field.maxLength} characters`;
+			break;
+		}
+		case 'html': {
+			if (typeof value !== 'string') return 'Must be an HTML string';
 			if (field.maxLength && value.length > field.maxLength)
 				return `Must be at most ${field.maxLength} characters`;
 			break;
@@ -164,7 +170,13 @@ export function sanitizeData(
 }
 
 function coerce(field: Field, value: unknown): unknown {
-	if (value === '' && field.type !== 'text' && field.type !== 'textarea' && field.type !== 'richText')
+	if (
+		value === '' &&
+		field.type !== 'text' &&
+		field.type !== 'textarea' &&
+		field.type !== 'richText' &&
+		field.type !== 'html'
+	)
 		return null;
 	switch (field.type) {
 		case 'number':
@@ -173,6 +185,8 @@ function coerce(field: Field, value: unknown): unknown {
 			return value === 'on' || value === 'true' || value === true;
 		case 'upload':
 			return value;
+		case 'html':
+			return typeof value === 'string' ? sanitizeDocumentHtml(value) : value;
 		case 'richText': {
 			let v = value;
 			if (typeof v === 'string' && v.trim().startsWith('[')) {
