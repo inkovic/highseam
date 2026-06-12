@@ -38,6 +38,11 @@ export interface OperationOptions {
 	 * - on findByID: return the latest draft instead of the published doc
 	 */
 	draft?: boolean;
+	/**
+	 * Locale for localized fields. Defaults to the config's defaultLocale.
+	 * Pass 'all' to read the raw per-locale objects.
+	 */
+	locale?: string;
 }
 
 const defaultAccess: AccessFn = ({ req }) => Boolean(req.user);
@@ -79,8 +84,58 @@ export class CMS {
 			.filter((c) => c.versions)
 			.map((c) => versionsSlug(c.slug));
 		const globalStores = (this.config.globals ?? []).map((g) => globalsSlug(g.slug));
-		await this.db.init([...slugs, ...versionStores, ...globalStores]);
+		await this.db.init([...slugs, ...versionStores, ...globalStores, '_locks']);
 		this.initialized = true;
+	}
+
+	// -------------------------------------------------------------------------
+	// Document locking (admin editing)
+	// -------------------------------------------------------------------------
+
+	private static LOCK_TTL_MS = 5 * 60 * 1000;
+
+	/**
+	 * Try to take the edit lock on a document. Returns the competing holder
+	 * if someone else has a fresh lock, otherwise takes/refreshes the lock.
+	 */
+	async takeLock(
+		slug: string,
+		id: string,
+		user: Doc | null
+	): Promise<{ lockedBy: { email: string; at: string } | null }> {
+		await this.init();
+		if (!user) return { lockedBy: null };
+
+		const { docs } = await this.db.find('_locks', {
+			where: { collection: { equals: slug }, parent: { equals: id } },
+			limit: 1
+		});
+		const lock = docs[0];
+		const fresh = lock && Date.now() - Date.parse(String(lock.at)) < CMS.LOCK_TTL_MS;
+
+		if (lock && fresh && lock.user !== user.id) {
+			return { lockedBy: { email: String(lock.email ?? 'another user'), at: String(lock.at) } };
+		}
+		if (lock) await this.db.delete('_locks', lock.id);
+		await this.db.create('_locks', {
+			collection: slug,
+			parent: id,
+			user: user.id,
+			email: user.email ?? user.id,
+			at: new Date().toISOString()
+		});
+		return { lockedBy: null };
+	}
+
+	/** Release the lock if held by this user (called after a successful save). */
+	async releaseLock(slug: string, id: string, user: Doc | null): Promise<void> {
+		await this.init();
+		if (!user) return;
+		const { docs } = await this.db.find('_locks', {
+			where: { collection: { equals: slug }, parent: { equals: id } },
+			limit: 1
+		});
+		if (docs[0] && docs[0].user === user.id) await this.db.delete('_locks', docs[0].id);
 	}
 
 	// -------------------------------------------------------------------------
@@ -116,8 +171,9 @@ export class CMS {
 		}
 
 		const { docs } = await this.db.find(globalsSlug(slug), { limit: 1 });
-		const doc = docs[0] ?? ({ id: slug } as Doc);
-		return this.populate(req, this.globalAsCollection(g), doc, opts.depth ?? 1);
+		const pseudo = this.globalAsCollection(g);
+		const doc = this.flattenLocalized(pseudo, docs[0] ?? ({ id: slug } as Doc), this.resolveLocale(opts));
+		return this.populate(req, pseudo, doc, opts.depth ?? 1);
 	}
 
 	async updateGlobal(
@@ -135,15 +191,87 @@ export class CMS {
 		}
 
 		const pseudo = this.globalAsCollection(g);
+		const locale = this.resolveLocale(opts);
 		const data = applyDefaults(pseudo, sanitizeData(pseudo, input));
 		validateData(pseudo, data);
 
 		const store = globalsSlug(slug);
 		const { docs } = await this.db.find(store, { limit: 1 });
+		const wrapped = this.wrapLocalized(pseudo, data, locale, docs[0]);
 		const doc = docs[0]
-			? await this.db.update(store, docs[0].id, data)
-			: await this.db.create(store, data);
-		return this.populate(req, pseudo, doc, opts.depth ?? 1);
+			? await this.db.update(store, docs[0].id, wrapped)
+			: await this.db.create(store, wrapped);
+		return this.populate(req, pseudo, this.flattenLocalized(pseudo, doc, locale), opts.depth ?? 1);
+	}
+
+	// -------------------------------------------------------------------------
+	// Localization helpers
+	// -------------------------------------------------------------------------
+
+	/** Resolve the effective locale for an operation ('all', a locale, or null if localization is off). */
+	resolveLocale(opts: OperationOptions): string | null {
+		const cfg = this.config.localization;
+		if (!cfg) return null;
+		const l = opts.locale ?? cfg.defaultLocale;
+		if (l === 'all') return 'all';
+		return cfg.locales.includes(l) ? l : cfg.defaultLocale;
+	}
+
+	/** Read-side: collapse per-locale objects to the requested locale (with default-locale fallback). */
+	private flattenLocalized(col: Pick<CollectionConfig, 'fields'>, doc: Doc, locale: string | null): Doc {
+		const cfg = this.config.localization;
+		if (!cfg || locale === null || locale === 'all') return doc;
+		const out = { ...doc };
+		for (const f of col.fields) {
+			if (!f.localized) continue;
+			const v = out[f.name];
+			if (v && typeof v === 'object' && !Array.isArray(v)) {
+				const o = v as Record<string, unknown>;
+				out[f.name] = o[locale] ?? o[cfg.defaultLocale] ?? null;
+			}
+		}
+		return out;
+	}
+
+	/** Write-side: merge flat localized values into the stored per-locale objects. */
+	private wrapLocalized(
+		col: Pick<CollectionConfig, 'fields'>,
+		data: Record<string, unknown>,
+		locale: string | null,
+		base?: Doc | Record<string, unknown>
+	): Record<string, unknown> {
+		const cfg = this.config.localization;
+		if (!cfg || locale === null || locale === 'all') return data;
+		const out = { ...data };
+		for (const f of col.fields) {
+			if (!f.localized || !(f.name in out)) continue;
+			const existing = base?.[f.name];
+			const existingObj =
+				existing && typeof existing === 'object' && !Array.isArray(existing)
+					? (existing as Record<string, unknown>)
+					: existing != null
+						? { [cfg.defaultLocale]: existing }
+						: {};
+			out[f.name] = { ...existingObj, [locale]: out[f.name] };
+		}
+		return out;
+	}
+
+	/** Rewrite where/sort keys on localized fields to `<name>.<locale>`. */
+	private localizeKey(col: CollectionConfig, key: string, locale: string | null): string {
+		const cfg = this.config.localization;
+		if (!cfg || locale === null || locale === 'all') return key;
+		const [head, ...rest] = key.split('.');
+		const field = col.fields.find((f) => f.name === head);
+		if (!field?.localized) return key;
+		return [head, locale, ...rest].join('.');
+	}
+
+	private localizeWhere(col: CollectionConfig, where: Where | undefined, locale: string | null): Where | undefined {
+		if (!where) return where;
+		const out: Where = {};
+		for (const [k, v] of Object.entries(where)) out[this.localizeKey(col, k, locale)] = v;
+		return out;
 	}
 
 	// -------------------------------------------------------------------------
@@ -153,7 +281,11 @@ export class CMS {
 	versionsConfig(col: CollectionConfig): Required<VersionsConfig> | null {
 		if (!col.versions) return null;
 		const v = typeof col.versions === 'object' ? col.versions : {};
-		return { drafts: v.drafts ?? false, maxPerDoc: v.maxPerDoc ?? 20 };
+		return {
+			drafts: v.drafts ?? false,
+			maxPerDoc: v.maxPerDoc ?? 20,
+			schedulePublish: v.schedulePublish ?? false
+		};
 	}
 
 	private async snapshotVersion(col: CollectionConfig, doc: Doc): Promise<void> {
@@ -206,20 +338,32 @@ export class CMS {
 	): Promise<PaginatedDocs> {
 		await this.init();
 		const col = this.collection(slug);
+		const locale = this.resolveLocale(opts);
 
-		let where = args.where;
+		await this.sweepScheduledPublishes(col);
+
+		let where = this.localizeWhere(col, args.where, locale);
 		if (!opts.overrideAccess) {
 			const access = await this.evalAccess(col, 'read', { req });
 			if (!access.allowed) throw new APIError('Forbidden', 403);
 			if (access.where) where = { ...where, ...access.where };
 		}
 
+		const sort = args.sort ? this.localizeKey(col, args.sort.replace(/^-/, ''), locale) : undefined;
+		const sortArg = sort && args.sort?.startsWith('-') ? `-${sort}` : sort;
+
 		const limit = clamp(args.limit ?? 10, 0, 100);
 		const page = Math.max(args.page ?? 1, 1);
-		const { docs, totalDocs } = await this.db.find(slug, { ...args, where, limit, page });
+		const { docs, totalDocs } = await this.db.find(slug, {
+			...args,
+			where,
+			sort: sortArg ?? args.sort,
+			limit,
+			page
+		});
 
 		const out: Doc[] = [];
-		for (const doc of docs) out.push(await this.afterRead(req, col, doc, opts.depth ?? 1));
+		for (const doc of docs) out.push(await this.afterRead(req, col, doc, opts.depth ?? 1, locale));
 
 		const totalPages = limit === 0 ? 1 : Math.max(Math.ceil(totalDocs / limit), 1);
 		return {
@@ -241,6 +385,7 @@ export class CMS {
 	): Promise<Doc> {
 		await this.init();
 		const col = this.collection(slug);
+		const locale = this.resolveLocale(opts);
 		let doc = await this.db.findById(slug, id);
 		if (!doc) throw new APIError('Not found', 404);
 
@@ -252,7 +397,7 @@ export class CMS {
 			}
 			const latest = await this.latestVersion(slug, id);
 			if (latest && latest.snapshot) doc = { ...latest.snapshot, id };
-			return this.afterRead(req, col, doc, opts.depth ?? 1);
+			return this.afterRead(req, col, doc, opts.depth ?? 1, locale);
 		}
 
 		if (!opts.overrideAccess) {
@@ -260,7 +405,7 @@ export class CMS {
 			if (!access.allowed) throw new APIError('Forbidden', 403);
 			if (access.where && !matchesWhere(doc, access.where)) throw new APIError('Forbidden', 403);
 		}
-		return this.afterRead(req, col, doc, opts.depth ?? 1);
+		return this.afterRead(req, col, doc, opts.depth ?? 1, locale);
 	}
 
 	// -------------------------------------------------------------------------
@@ -331,9 +476,11 @@ export class CMS {
 			Object.assign(data, await this.storeFile(col, file));
 		}
 
+		const locale = this.resolveLocale(opts);
+
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'create', data);
 		validateData(col, data);
-		await this.checkUnique(col, data);
+		await this.checkUnique(col, data, undefined, locale);
 
 		if (col.auth) {
 			const password = data.password as string;
@@ -350,13 +497,14 @@ export class CMS {
 		}
 
 		data = await this.runDataHooks(col, 'beforeChange', req, 'create', data);
+		data = this.wrapLocalized(col, data, locale);
 		const doc = await this.db.create(slug, data);
 		await this.snapshotVersion(col, doc);
 
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'create', collection: slug, doc, data });
 
-		return this.afterRead(req, col, doc, opts.depth ?? 1);
+		return this.afterRead(req, col, doc, opts.depth ?? 1, locale);
 	}
 
 	async update(
@@ -389,9 +537,15 @@ export class CMS {
 			}
 		}
 
+		const locale = this.resolveLocale(opts);
+
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, originalDoc);
-		validateData(col, { ...stripMeta(originalDoc), ...data }, { partial: false });
-		await this.checkUnique(col, data, id);
+		validateData(
+			col,
+			this.flattenLocalized(col, { ...stripMeta(originalDoc), ...data } as Doc, locale ?? null),
+			{ partial: false }
+		);
+		await this.checkUnique(col, data, id, locale);
 
 		if (col.auth) {
 			if (typeof data.password === 'string' && data.password.length > 0) {
@@ -406,10 +560,10 @@ export class CMS {
 		// Draft save: snapshot a version, leave the live document untouched.
 		if (opts.draft && this.versionsConfig(col)?.drafts) {
 			const now = new Date().toISOString();
+			const base = { ...stripMeta(originalDoc), ...(await this.draftBase(col, slug, id)) };
 			const draftDoc: Doc = {
-				...stripMeta(originalDoc),
-				...(await this.draftBase(col, slug, id)),
-				...data,
+				...base,
+				...this.wrapLocalized(col, data, locale, base),
 				_status: 'draft',
 				id,
 				createdAt: originalDoc.createdAt,
@@ -418,16 +572,16 @@ export class CMS {
 			await this.snapshotVersion(col, draftDoc);
 			for (const hook of col.hooks?.afterChange ?? [])
 				await hook({ req, operation: 'update', collection: slug, doc: draftDoc, data, originalDoc });
-			return this.afterRead(req, col, draftDoc, opts.depth ?? 1);
+			return this.afterRead(req, col, draftDoc, opts.depth ?? 1, locale);
 		}
 
-		const doc = await this.db.update(slug, id, data);
+		const doc = await this.db.update(slug, id, this.wrapLocalized(col, data, locale, originalDoc));
 		await this.snapshotVersion(col, doc);
 
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc, data, originalDoc });
 
-		return this.afterRead(req, col, doc, opts.depth ?? 1);
+		return this.afterRead(req, col, doc, opts.depth ?? 1, locale);
 	}
 
 	/** Base data for a draft save: the latest draft if one exists, else nothing. */
@@ -441,6 +595,27 @@ export class CMS {
 			return stripMeta(latest.snapshot as Doc);
 		}
 		return {};
+	}
+
+	/**
+	 * Scheduled publishing: promote drafts whose `publishAt` date has passed.
+	 * Swept lazily at the top of find() — no background jobs required.
+	 */
+	private async sweepScheduledPublishes(col: CollectionConfig): Promise<void> {
+		const vcfg = this.versionsConfig(col);
+		if (!vcfg?.drafts || !vcfg.schedulePublish) return;
+		const now = new Date().toISOString();
+		const { docs } = await this.db.find(col.slug, {
+			where: { _status: { equals: 'draft' }, publishAt: { less_than: now, exists: true } },
+			limit: 10
+		});
+		for (const doc of docs) {
+			try {
+				await this.publish({ user: null }, col.slug, doc.id, { overrideAccess: true });
+			} catch (err) {
+				console.error(`[svelte-payload] scheduled publish failed for ${col.slug}/${doc.id}`, err);
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -464,14 +639,15 @@ export class CMS {
 		const source = latest?.snapshot ? { ...stripMeta(latest.snapshot as Doc) } : stripMeta(doc);
 		let data: Record<string, unknown> = { ...source, _status: 'published' };
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, doc);
-		validateData(col, data);
+		// Stored localized values are per-locale objects; validate a flattened view.
+		validateData(col, this.flattenLocalized(col, data as Doc, this.resolveLocale({})));
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, doc);
 
 		const updated = await this.db.update(slug, id, data);
 		await this.snapshotVersion(col, updated);
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc: updated, data, originalDoc: doc });
-		return this.afterRead(req, col, updated, opts.depth ?? 1);
+		return this.afterRead(req, col, updated, opts.depth ?? 1, this.resolveLocale(opts));
 	}
 
 	/** Revert a published doc to draft state (hides it from published-only readers). */
@@ -677,15 +853,17 @@ export class CMS {
 	private async checkUnique(
 		col: CollectionConfig,
 		data: Record<string, unknown>,
-		excludeId?: string
+		excludeId?: string,
+		locale?: string | null
 	): Promise<void> {
 		const uniqueFields = col.fields.filter((f) => f.unique).map((f) => f.name);
 		if (col.auth) uniqueFields.push('email');
 		for (const name of uniqueFields) {
 			const value = data[name];
 			if (value === undefined || value === null || value === '') continue;
+			const key = this.localizeKey(col, name, locale ?? null);
 			const { docs } = await this.db.find(col.slug, {
-				where: { [name]: { equals: value } },
+				where: { [key]: { equals: value } },
 				limit: 1
 			});
 			if (docs[0] && docs[0].id !== excludeId)
@@ -699,8 +877,14 @@ export class CMS {
 		return out;
 	}
 
-	private async afterRead(req: ReqContext, col: CollectionConfig, doc: Doc, depth: number): Promise<Doc> {
-		let out = this.sanitizeOutput(col, doc);
+	private async afterRead(
+		req: ReqContext,
+		col: CollectionConfig,
+		doc: Doc,
+		depth: number,
+		locale: string | null = null
+	): Promise<Doc> {
+		let out = this.flattenLocalized(col, this.sanitizeOutput(col, doc), locale ?? this.resolveLocale({}));
 		// API keys are secrets: only the user themself (or an admin) may see them.
 		if ('apiKey' in out) {
 			const isSelf = req.user?.id === out.id;

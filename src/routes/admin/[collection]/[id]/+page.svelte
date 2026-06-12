@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import DocForm from '$lib/admin/DocForm.svelte';
 	import { displayValue } from '$lib/admin/client';
 	import type { ActionData, PageData } from './$types';
@@ -7,6 +8,10 @@
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const title = $derived(displayValue(data.doc[data.collection.useAsTitle] ?? data.doc.id));
+	/** Action URLs carry the locale so writes target the locale being edited. */
+	const localeSuffix = $derived(
+		data.hasLocalizedFields && data.locale ? `&locale=${data.locale}` : ''
+	);
 	const savedMessage = $derived(
 		form?.published
 			? 'Published.'
@@ -45,6 +50,18 @@
 		</p>
 	</div>
 	<div class="flex shrink-0 items-center gap-2">
+		{#if data.hasLocalizedFields && data.locales.length > 0}
+			<select
+				class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm text-(--color-fg) focus:border-(--color-primary) focus:outline-none"
+				value={data.locale}
+				onchange={(e) => goto(`?locale=${e.currentTarget.value}`, { invalidateAll: true })}
+				title="Editing locale"
+			>
+				{#each data.locales as l (l)}
+					<option value={l}>{l.toUpperCase()}</option>
+				{/each}
+			</select>
+		{/if}
 		{#if data.collection.drafts && data.liveStatus === 'published'}
 			<form method="POST" action="?/unpublish" use:enhance>
 				<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">
@@ -68,6 +85,13 @@
 	</div>
 </div>
 
+{#if data.lockedBy}
+	<div class="mb-4 max-w-2xl rounded-(--radius) border border-(--color-danger) bg-(--color-elevate) px-4 py-2 text-sm text-(--color-danger)">
+		⚠ Currently being edited by <strong>{data.lockedBy.email}</strong> (since
+		{displayValue(data.lockedBy.at)}). Your changes may overwrite theirs.
+	</div>
+{/if}
+
 {#if savedMessage}
 	<div class="mb-4 max-w-2xl rounded-(--radius) border border-(--color-success) bg-(--color-elevate) px-4 py-2 text-sm text-(--color-success)">
 		{savedMessage}
@@ -83,8 +107,8 @@
 			errors={form?.errors ?? {}}
 			message={form?.message}
 			submitLabel={data.collection.drafts ? 'Publish' : 'Save changes'}
-			action={data.collection.drafts ? '?/publish' : '?/save'}
-			draftAction={data.collection.drafts ? '?/saveDraft' : undefined}
+			action={(data.collection.drafts ? '?/publish' : '?/save') + localeSuffix}
+			draftAction={data.collection.drafts ? `?/saveDraft${localeSuffix}` : undefined}
 			autosave={data.collection.drafts}
 		/>
 	</div>

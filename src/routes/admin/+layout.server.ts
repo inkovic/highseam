@@ -22,6 +22,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		collections: cms.collections.filter((c) => !c.admin?.hidden).map(toClientCollection),
 		globals: cms.globals
 			.filter((g) => !g.admin?.hidden)
-			.map((g) => ({ slug: g.slug, label: g.label ?? labelize(g.slug) }))
+			.map((g) => ({ slug: g.slug, label: g.label ?? labelize(g.slug) })),
+		localization: cms.config.localization ?? null
 	};
 };

@@ -130,7 +130,8 @@ function buildSchema(cms: CMS): GraphQLSchema {
 				where: { type: JSONScalar },
 				limit: { type: GraphQLInt },
 				page: { type: GraphQLInt },
-				sort: { type: GraphQLString }
+				sort: { type: GraphQLString },
+				locale: { type: GraphQLString }
 			},
 			resolve: (_s, args, ctx) =>
 				ctx.cms.find(
@@ -142,7 +143,7 @@ function buildSchema(cms: CMS): GraphQLSchema {
 						page: args.page as number | undefined,
 						sort: args.sort as string | undefined
 					},
-					{ depth: 0 }
+					{ depth: 0, locale: args.locale as string | undefined }
 				)
 		};
 
@@ -150,12 +151,14 @@ function buildSchema(cms: CMS): GraphQLSchema {
 			type,
 			args: {
 				id: { type: new GraphQLNonNull(GraphQLID) },
-				draft: { type: GraphQLBoolean }
+				draft: { type: GraphQLBoolean },
+				locale: { type: GraphQLString }
 			},
 			resolve: (_s, args, ctx) =>
 				ctx.cms.findByID(ctx.req, slug, args.id as string, {
 					depth: 0,
-					draft: Boolean(args.draft)
+					draft: Boolean(args.draft),
+					locale: args.locale as string | undefined
 				})
 		};
 
@@ -163,12 +166,14 @@ function buildSchema(cms: CMS): GraphQLSchema {
 			type,
 			args: {
 				data: { type: new GraphQLNonNull(JSONScalar) },
-				draft: { type: GraphQLBoolean }
+				draft: { type: GraphQLBoolean },
+				locale: { type: GraphQLString }
 			},
 			resolve: (_s, args, ctx) =>
 				ctx.cms.create(ctx.req, slug, args.data as Record<string, unknown>, {
 					depth: 0,
-					draft: Boolean(args.draft)
+					draft: Boolean(args.draft),
+					locale: args.locale as string | undefined
 				})
 		};
 		mutation[`update${singleName}`] = {
@@ -176,12 +181,14 @@ function buildSchema(cms: CMS): GraphQLSchema {
 			args: {
 				id: { type: new GraphQLNonNull(GraphQLID) },
 				data: { type: new GraphQLNonNull(JSONScalar) },
-				draft: { type: GraphQLBoolean }
+				draft: { type: GraphQLBoolean },
+				locale: { type: GraphQLString }
 			},
 			resolve: (_s, args, ctx) =>
 				ctx.cms.update(ctx.req, slug, args.id as string, args.data as Record<string, unknown>, {
 					depth: 0,
-					draft: Boolean(args.draft)
+					draft: Boolean(args.draft),
+					locale: args.locale as string | undefined
 				})
 		};
 		mutation[`delete${singleName}`] = {
@@ -216,13 +223,21 @@ function buildSchema(cms: CMS): GraphQLSchema {
 		});
 		query[name] = {
 			type: gType,
-			resolve: (_s, _a, ctx) => ctx.cms.findGlobal(ctx.req, g.slug, { depth: 0 })
+			args: { locale: { type: GraphQLString } },
+			resolve: (_s, args, ctx) =>
+				ctx.cms.findGlobal(ctx.req, g.slug, { depth: 0, locale: args.locale as string | undefined })
 		};
 		mutation[`update${name}`] = {
 			type: gType,
-			args: { data: { type: new GraphQLNonNull(JSONScalar) } },
+			args: {
+				data: { type: new GraphQLNonNull(JSONScalar) },
+				locale: { type: GraphQLString }
+			},
 			resolve: (_s, args, ctx) =>
-				ctx.cms.updateGlobal(ctx.req, g.slug, args.data as Record<string, unknown>, { depth: 0 })
+				ctx.cms.updateGlobal(ctx.req, g.slug, args.data as Record<string, unknown>, {
+					depth: 0,
+					locale: args.locale as string | undefined
+				})
 		};
 	}
 

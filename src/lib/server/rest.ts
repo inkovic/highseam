@@ -17,7 +17,7 @@ const OPS = new Set([
  * Parse Payload-style query params:
  *   ?where[status][equals]=published&limit=10&page=2&sort=-createdAt&depth=1
  */
-export function parseFindArgs(url: URL): FindArgs & { depth: number } {
+export function parseFindArgs(url: URL): FindArgs & { depth: number; locale?: string } {
 	const where: Where = {};
 	for (const [key, value] of url.searchParams) {
 		const m = key.match(/^where\[([^\]]+)\]\[([^\]]+)\]$/);
@@ -57,7 +57,8 @@ export function parseFindArgs(url: URL): FindArgs & { depth: number } {
 		limit: intParam(url, 'limit', 10),
 		page: intParam(url, 'page', 1),
 		sort: url.searchParams.get('sort') ?? undefined,
-		depth: intParam(url, 'depth', 1)
+		depth: intParam(url, 'depth', 1),
+		locale: url.searchParams.get('locale') ?? undefined
 	};
 }
 

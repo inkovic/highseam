@@ -202,6 +202,27 @@ Authorization: users API-Key <key>
 Drafts-enabled collections autosave in the admin: edits debounce into
 background draft saves (published doc untouched), with a status indicator.
 
+## Localization
+
+Set `localization: { locales: ['en', 'es'], defaultLocale: 'en' }` and mark
+fields `localized: true`. Values are stored per-locale and flattened on read
+with default-locale fallback. `?locale=es` on any REST endpoint (or the
+`locale` arg in GraphQL) targets that locale for reads AND writes;
+`locale=all` returns the raw per-locale objects. Filtering and unique checks
+are locale-aware, and the admin gets a locale switcher on edit pages.
+
+## Scheduled publishing
+
+With `versions: { drafts: true, schedulePublish: true }`, drafts whose
+`publishAt` date has passed are auto-promoted to published (swept lazily on
+reads — no job runner needed).
+
+## Document locking
+
+Opening a document in the admin takes a 5-minute rolling edit lock. A second
+editor sees a warning banner naming the current editor; locks release on
+save/publish/delete or expire on their own.
+
 ## Scope: what's in, what's not
 
 Recreated from Payload: config-driven collections, field types (including
@@ -212,9 +233,11 @@ validation, pagination/filtering/sorting, relationship population with depth,
 **drafts & version history** (save draft / publish / unpublish / restore /
 prune), **media & uploads** (fs/R2 storage adapters, mime/size limits, file
 serving), **globals**, **generated TS types**, **GraphQL**, **plugins**,
-**API keys**, **autosave**, a markdown rich-text editor with toolbar +
-preview, first-user onboarding, REST + Local APIs, auto-generated admin.
+**API keys**, **autosave**, **localization** (per-field, locale fallback,
+locale-aware queries), **scheduled publishing**, **document locking**, a
+markdown rich-text editor with toolbar + preview, first-user onboarding,
+REST + Local APIs, auto-generated admin.
 
 Not recreated (yet): Lexical (rich text is markdown-backed), image
-resizing/focal point, localization, jobs/queues, document locking,
-scheduled publishing, email flows (verification / forgot-password).
+resizing/focal point, jobs/queues, email flows (verification /
+forgot-password), multi-tenancy, admin i18n.
