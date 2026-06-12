@@ -28,6 +28,18 @@ The scaffolder copies thin route stubs (REST + GraphQL + admin + media) that
 import from the package — delete what you don't need, customize what you do.
 Everything is driven by your `src/cms.config.ts`.
 
+**Gotchas:**
+
+- **Don't nest the CMS app inside another pnpm project** (e.g. `app/cms/`):
+  pnpm hoists resolution to the parent and the package's deps (`graphql`)
+  won't resolve. Scaffold a sibling directory instead.
+- **Table-backed collections + local dev:** your LOCAL D1 starts empty, so a
+  collection mapped to an existing remote table will report "table does not
+  exist" until you seed it:
+  `npx wrangler d1 execute <db-name> --local --file schema.sql`.
+- Engine updates arrive via `npm i <new tarball>`; scaffolded stubs are
+  yours and don't auto-update (see CHANGELOG for stub-affecting releases).
+
 ## Quick start (this repo — the demo app)
 
 ```sh

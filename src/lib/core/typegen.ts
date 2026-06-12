@@ -44,8 +44,10 @@ function fieldType(f: Field, relNames: Map<string, string>): string {
 			const one = `string | ${related}`;
 			return f.hasMany ? `(${one})[]` : one;
 		}
-		case 'upload':
-			return `string | ${relNames.get(f.relationTo) ?? 'string'}`;
+		case 'upload': {
+			const one = `string | ${relNames.get(f.relationTo) ?? 'string'}`;
+			return f.hasMany ? `(${one})[]` : one;
+		}
 		case 'array': {
 			return `{\n${f.fields.map((s) => `\t\t${prop(s, relNames, 2)}`).join('\n')}\n\t}[]`;
 		}

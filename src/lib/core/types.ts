@@ -48,6 +48,11 @@ export interface FieldAdminConfig {
 	readOnly?: boolean;
 	/** Hide from the auto-generated admin UI (still present in the API). */
 	hidden?: boolean;
+	/**
+	 * Group name: fields sharing a group render inside a collapsible section
+	 * in the edit form (essential for wide table-backed collections).
+	 */
+	group?: string;
 }
 
 export interface BaseField {
@@ -131,6 +136,8 @@ export interface RelationshipField extends BaseField {
 export interface UploadField extends BaseField {
 	type: 'upload';
 	relationTo: string;
+	/** Multiple uploads on one field (image galleries). */
+	hasMany?: boolean;
 }
 
 export interface ArrayField extends BaseField {
@@ -255,6 +262,12 @@ export interface CollectionAdminConfig {
 	hidden?: boolean;
 	/** Lucide-ish icon name hint (decorative only). */
 	group?: string;
+	/**
+	 * Custom document actions: buttons on the edit page that POST
+	 * `{ collection, id }` (JSON) to your endpoint — the hook bus surfaced
+	 * in the UI (e.g. a "Generate with AI" button).
+	 */
+	actions?: { label: string; url: string; confirm?: string }[];
 }
 
 export interface AuthConfig {

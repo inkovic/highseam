@@ -12,6 +12,26 @@
 	const localeSuffix = $derived(
 		data.hasLocalizedFields && data.locale ? `&locale=${data.locale}` : ''
 	);
+
+	// Custom document actions (collection.admin.actions): POST {collection,id}
+	// to a consumer endpoint — the hook bus surfaced in the UI.
+	let actionState = $state<Record<string, string>>({});
+	async function runAction(action: { label: string; url: string; confirm?: string }) {
+		if (action.confirm && !confirm(action.confirm)) return;
+		actionState[action.label] = '…';
+		try {
+			const res = await fetch(action.url, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ collection: data.collection.slug, id: data.doc.id })
+			});
+			const body = (await res.json().catch(() => ({}))) as { message?: string };
+			actionState[action.label] = res.ok ? (body.message ?? 'Done') : (body.message ?? `Failed (${res.status})`);
+			if (res.ok) setTimeout(() => location.reload(), 600);
+		} catch {
+			actionState[action.label] = 'Failed';
+		}
+	}
 	const savedMessage = $derived(
 		form?.published
 			? 'Published.'
@@ -62,6 +82,15 @@
 				{/each}
 			</select>
 		{/if}
+		{#each data.collection.actions as action (action.label)}
+			<button
+				type="button"
+				class="rounded-(--radius) border border-(--color-primary) px-3 py-1.5 text-sm text-(--color-primary) hover:bg-(--color-primary) hover:text-(--color-primary-fg)"
+				onclick={() => runAction(action)}
+			>
+				{actionState[action.label] ?? action.label}
+			</button>
+		{/each}
 		{#if data.collection.drafts && data.liveStatus === 'published'}
 			<form method="POST" action="?/unpublish" use:enhance>
 				<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">

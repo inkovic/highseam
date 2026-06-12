@@ -9,8 +9,36 @@
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import type { AdapterStoreInfo, DatabaseAdapter, Doc, FindArgs, Where } from '../types';
+import { APIError } from '../types';
 
 type TableInfo = NonNullable<AdapterStoreInfo['table']>;
+
+/** Translate raw SQLite errors on table-backed collections into actionable ones. */
+async function tableOp<T>(t: TableInfo, fn: () => Promise<T>): Promise<T> {
+	try {
+		return await fn();
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (/no such table/i.test(msg)) {
+			throw new APIError(
+				`Table "${t.name}" does not exist in this D1 database. Table-backed collections ` +
+					`require the table to already exist — your LOCAL D1 starts empty, so either seed it ` +
+					`(npx wrangler d1 execute <db-name> --local --file schema.sql) or run against the ` +
+					`remote database. Original error: ${msg}`,
+				500
+			);
+		}
+		if (/no such column: (\w+)/i.test(msg)) {
+			const col = msg.match(/no such column: (\w+)/i)?.[1];
+			throw new APIError(
+				`Column "${col}" not found in table "${t.name}" — field names on table-backed ` +
+					`collections must match column names exactly. Original error: ${msg}`,
+				500
+			);
+		}
+		throw err;
+	}
+}
 
 export class D1Adapter implements DatabaseAdapter {
 	readonly name = 'd1';
@@ -233,7 +261,7 @@ export class D1Adapter implements DatabaseAdapter {
 
 	async find(collection: string, args: FindArgs) {
 		const t = this.tables.get(collection);
-		if (t) return this.tFind(t, args);
+		if (t) return tableOp(t, () => this.tFind(t, args));
 
 		const { sql: whereSql, params } = this.whereSQL(args.where, (p) => this.dColFor(p));
 		const limit = args.limit ?? 10;
@@ -267,7 +295,7 @@ export class D1Adapter implements DatabaseAdapter {
 
 	async findById(collection: string, id: string) {
 		const t = this.tables.get(collection);
-		if (t) return this.tFindById(t, id);
+		if (t) return tableOp(t, () => this.tFindById(t, id));
 		const row = await this.db
 			.prepare('SELECT * FROM documents WHERE collection = ? AND id = ?')
 			.bind(collection, id)
@@ -277,7 +305,7 @@ export class D1Adapter implements DatabaseAdapter {
 
 	async create(collection: string, data: Record<string, unknown>) {
 		const t = this.tables.get(collection);
-		if (t) return this.tCreate(t, data);
+		if (t) return tableOp(t, () => this.tCreate(t, data));
 		const id = crypto.randomUUID();
 		const now = new Date().toISOString();
 		await this.db
@@ -291,7 +319,7 @@ export class D1Adapter implements DatabaseAdapter {
 
 	async update(collection: string, id: string, data: Record<string, unknown>) {
 		const t = this.tables.get(collection);
-		if (t) return this.tUpdate(t, id, data);
+		if (t) return tableOp(t, () => this.tUpdate(t, id, data));
 		const existing = await this.findById(collection, id);
 		if (!existing) throw new Error(`Not found: ${collection}/${id}`);
 		const { id: _i, createdAt: _c, updatedAt: _u, ...body } = existing;
@@ -306,7 +334,7 @@ export class D1Adapter implements DatabaseAdapter {
 
 	async delete(collection: string, id: string) {
 		const t = this.tables.get(collection);
-		if (t) return this.tDelete(t, id);
+		if (t) return tableOp(t, () => this.tDelete(t, id));
 		await this.db
 			.prepare('DELETE FROM documents WHERE collection = ? AND id = ?')
 			.bind(collection, id)

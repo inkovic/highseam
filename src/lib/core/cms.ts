@@ -951,7 +951,7 @@ export class CMS {
 				}
 			};
 
-			const hasMany = field.type === 'relationship' && Boolean(field.hasMany);
+			const hasMany = Boolean(field.hasMany);
 			out[field.name] = hasMany
 				? await Promise.all((Array.isArray(value) ? value : [value]).map(resolve))
 				: await resolve(value);
