@@ -1,14 +1,5 @@
 import type { Handle } from '@sveltejs/kit';
-import { getCMS, getUserFromCookies } from '$lib/server';
+import { createCMSHandle } from '$lib/server';
+import cmsConfig from './cms.config';
 
-export const handle: Handle = async ({ event, resolve }) => {
-	const cms = getCMS(event.platform);
-	event.locals.cms = cms;
-
-	// API key header takes precedence; falls back to the session cookie.
-	event.locals.user =
-		(await cms.authenticateAPIKey(event.request.headers.get('authorization'))) ??
-		(await getUserFromCookies(cms, event.cookies));
-
-	return resolve(event);
-};
+export const handle: Handle = createCMSHandle(cmsConfig) as Handle;
