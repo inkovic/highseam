@@ -20,15 +20,37 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 	const tech = await cms.create(sys, 'categories', { title: 'Tech', slug: 'tech' }, opts);
 	const news = await cms.create(sys, 'categories', { title: 'News', slug: 'news' }, opts);
 
-	// Published post (versions engine stamps _status + snapshots v1).
-	await cms.create(
+	// Published post with STRUCTURED rich text: typed components live inside
+	// the document flow (the Lexical-equivalent experience).
+	const hello = await cms.create(
 		sys,
 		'posts',
 		{
 			title: 'Hello from svelte-payload',
 			excerpt: 'A Payload-inspired CMS, recreated natively in SvelteKit.',
-			content:
-				'## It works\n\nThis post was created through the Local API by the seed script. Edit it in the admin panel, or fetch it:\n\n```\nGET /api/posts?where[_status][equals]=published&depth=1\n```',
+			content: [
+				{ type: 'h2', html: 'It works' },
+				{
+					type: 'p',
+					html: 'This post was created through the <strong>Local API</strong> by the seed script. Its content is structured rich text — an array of typed nodes, not a blob of HTML.'
+				},
+				{
+					type: 'block',
+					blockType: 'callout',
+					fields: { tone: 'info', text: 'Components like this callout are embedded INSIDE the document flow — like Payload\'s Lexical blocks.' }
+				},
+				{
+					type: 'ul',
+					items: [
+						'Text blocks with <strong>inline</strong> <em>formatting</em>',
+						'Embedded images from the media collection',
+						'Embeds of other documents',
+						'Typed components defined in config'
+					]
+				},
+				{ type: 'code', code: 'GET /api/posts?where[_status][equals]=published&depth=1' },
+				{ type: 'block', blockType: 'cta', fields: { label: 'Open the admin', url: '/admin' } }
+			],
 			author: admin.id,
 			category: tech.id,
 			featured: true
@@ -43,8 +65,13 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 		{
 			title: 'Drafts are hidden from anonymous readers',
 			excerpt: 'Access control can return query constraints, not just booleans.',
-			content:
-				'This post is a **draft**. Save drafts without touching the published version, then Publish when ready — and restore any previous version from the sidebar.',
+			content: [
+				{
+					type: 'p',
+					html: 'This post is a <strong>draft</strong>. Save drafts without touching the published version, then Publish when ready.'
+				},
+				{ type: 'relationship', relationTo: 'posts', value: hello.id }
+			],
 			author: admin.id,
 			category: news.id
 		},

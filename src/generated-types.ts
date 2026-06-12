@@ -18,12 +18,14 @@ export interface Post {
 	title: string;
 	slug?: string;
 	excerpt?: string;
-	content?: string;
+	content?: import("$lib/core/richtext").RichTextNode[] | string;
 	author?: string | User;
 	category?: string | Category;
 	coverImage?: string | Media;
 	featured?: boolean;
+	publishAt?: string;
 	publishedAt?: string;
+	lastModifiedBy?: string;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -60,7 +62,7 @@ export interface Page {
 		ctaUrl?: string;
 	} | {
 		blockType: 'content';
-		body: string;
+		body: import("$lib/core/richtext").RichTextNode[] | string;
 	} | {
 		blockType: 'quote';
 		text: string;
@@ -74,6 +76,7 @@ export interface Page {
 	}[];
 	})[];
 	meta?: unknown;
+	lastModifiedBy?: string;
 	createdAt?: string;
 	updatedAt?: string;
 }

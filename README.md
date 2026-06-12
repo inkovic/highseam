@@ -202,6 +202,29 @@ Authorization: users API-Key <key>
 Drafts-enabled collections autosave in the admin: edits debounce into
 background draft saves (published doc untouched), with a status indicator.
 
+## Rich text (structured, with embedded components)
+
+`richText` fields store a JSON array of typed nodes — the Lexical-equivalent.
+Text blocks carry sanitized inline HTML (server-enforced whitelist:
+strong/em/code/a/s/u); everything else is a first-class node INSIDE the
+document flow:
+
+```ts
+{
+  name: 'content', type: 'richText',
+  uploads: 'media',            // embeddable images
+  relationships: ['posts'],    // embeddable document references
+  blocks: [calloutBlock, ctaBlock]  // typed components, defined in config
+}
+```
+
+The admin renders a block editor: contenteditable text blocks with a
+formatting toolbar, plus add/reorder/delete for lists, quotes, code, dividers,
+images, embeds, and your components — each component edits its own typed
+fields inline. `$lib/RichTextRenderer.svelte` renders it on the frontend
+(`/posts/<slug>` is a working example, with `extractRichTextRefs` resolving
+embedded documents server-side). Legacy markdown strings still work.
+
 ## Localization
 
 Set `localization: { locales: ['en', 'es'], defaultLocale: 'en' }` and mark
@@ -234,10 +257,11 @@ validation, pagination/filtering/sorting, relationship population with depth,
 prune), **media & uploads** (fs/R2 storage adapters, mime/size limits, file
 serving), **globals**, **generated TS types**, **GraphQL**, **plugins**,
 **API keys**, **autosave**, **localization** (per-field, locale fallback,
-locale-aware queries), **scheduled publishing**, **document locking**, a
-markdown rich-text editor with toolbar + preview, first-user onboarding,
-REST + Local APIs, auto-generated admin.
+locale-aware queries), **scheduled publishing**, **document locking**,
+**structured rich text with embedded components** (block editor, XSS-safe
+sanitizer, frontend renderer), first-user onboarding, REST + Local APIs,
+auto-generated admin.
 
-Not recreated (yet): Lexical (rich text is markdown-backed), image
-resizing/focal point, jobs/queues, email flows (verification /
-forgot-password), multi-tenancy, admin i18n.
+Not recreated (yet): image resizing/focal point, jobs/queues, email flows
+(verification / forgot-password), multi-tenancy, admin i18n, collaborative
+cursors.

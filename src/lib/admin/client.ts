@@ -21,6 +21,9 @@ export interface ClientField {
 	blocks?: ClientBlock[];
 	minRows?: number;
 	maxRows?: number;
+	/** richText: embeddable upload collection + relationship targets */
+	uploads?: string;
+	relationships?: string[];
 	minLength?: number;
 	maxLength?: number;
 	min?: number;
@@ -89,9 +92,18 @@ function toClientField(f: Field): ClientField {
 		base.minRows = f.minRows;
 		base.maxRows = f.maxRows;
 	}
-	if (f.type === 'text' || f.type === 'textarea' || f.type === 'richText' || f.type === 'email') {
+	if (f.type === 'text' || f.type === 'textarea' || f.type === 'email') {
 		base.minLength = f.minLength;
 		base.maxLength = f.maxLength;
+	}
+	if (f.type === 'richText') {
+		base.blocks = (f.blocks ?? []).map((b) => ({
+			slug: b.slug,
+			label: b.labels?.singular ?? labelize(b.slug),
+			fields: b.fields.map(toClientField)
+		}));
+		base.uploads = f.uploads;
+		base.relationships = f.relationships;
 	}
 	if (f.type === 'number') {
 		base.min = f.min;

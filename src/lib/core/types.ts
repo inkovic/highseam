@@ -68,9 +68,25 @@ export interface BaseField {
 }
 
 export interface TextField extends BaseField {
-	type: 'text' | 'textarea' | 'richText' | 'email';
+	type: 'text' | 'textarea' | 'email';
 	minLength?: number;
 	maxLength?: number;
+}
+
+/**
+ * Structured rich text (the Lexical-equivalent). Value is a JSON array of
+ * nodes — paragraphs/headings/lists with sanitized inline HTML, plus
+ * embeddable typed components, uploads, and relationships INSIDE the
+ * document flow. Legacy markdown strings are still accepted.
+ */
+export interface RichTextField extends BaseField {
+	type: 'richText';
+	/** Typed components editors can embed inside the document. */
+	blocks?: BlockConfig[];
+	/** Upload collection slug for embeddable media nodes. */
+	uploads?: string;
+	/** Collection slugs embeddable as relationship nodes. */
+	relationships?: string[];
 }
 
 export interface NumberField extends BaseField {
@@ -137,6 +153,7 @@ export interface JsonField extends BaseField {
 
 export type Field =
 	| TextField
+	| RichTextField
 	| NumberField
 	| CheckboxField
 	| DateField

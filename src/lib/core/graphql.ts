@@ -296,7 +296,6 @@ function fieldConfig(
 	switch (f.type) {
 		case 'text':
 		case 'textarea':
-		case 'richText':
 		case 'email':
 		case 'date':
 		case 'select':
@@ -307,6 +306,7 @@ function fieldConfig(
 			return { type: GraphQLFloat };
 		case 'checkbox':
 			return { type: GraphQLBoolean };
+		case 'richText': // structured node array (or legacy markdown string)
 		case 'array':
 		case 'blocks':
 		case 'json':

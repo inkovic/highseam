@@ -44,10 +44,10 @@
 			Open admin panel →
 		</a>
 		<a
-			href="/api/posts?where[status][equals]=published"
+			href="/posts"
 			class="rounded-(--radius) border border-(--color-border) px-5 py-2.5 text-sm text-(--color-muted) hover:text-(--color-fg)"
 		>
-			Try the REST API
+			View the demo site →
 		</a>
 	</div>
 
