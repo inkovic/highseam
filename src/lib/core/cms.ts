@@ -9,6 +9,7 @@ import { hashPassword, signJWT, verifyJWT, verifyPassword } from './crypto';
 import type {
 	AccessArgs,
 	AccessFn,
+	AdapterStoreInfo,
 	CMSConfig,
 	CollectionConfig,
 	DatabaseAdapter,
@@ -79,13 +80,45 @@ export class CMS {
 
 	async init(): Promise<void> {
 		if (this.initialized) return;
-		const slugs = this.config.collections.map((c) => c.slug);
-		const versionStores = this.config.collections
-			.filter((c) => c.versions)
-			.map((c) => versionsSlug(c.slug));
-		const globalStores = (this.config.globals ?? []).map((g) => globalsSlug(g.slug));
-		await this.db.init([...slugs, ...versionStores, ...globalStores, '_locks']);
+		const stores: AdapterStoreInfo[] = this.config.collections.map((c) => ({
+			slug: c.slug,
+			table: this.tableInfo(c)
+		}));
+		for (const c of this.config.collections)
+			if (c.versions) stores.push({ slug: versionsSlug(c.slug) });
+		for (const g of this.config.globals ?? []) stores.push({ slug: globalsSlug(g.slug) });
+		stores.push({ slug: '_locks' });
+		await this.db.init(stores);
 		this.initialized = true;
+	}
+
+	/** Build adapter metadata for table-backed collections. */
+	private tableInfo(col: CollectionConfig): AdapterStoreInfo['table'] | undefined {
+		if (!col.table) return undefined;
+		const t = typeof col.table === 'string' ? { name: col.table } : col.table;
+		const jsonColumns: string[] = [];
+		const boolColumns: string[] = [];
+		for (const f of col.fields) {
+			if (
+				f.type === 'array' ||
+				f.type === 'blocks' ||
+				f.type === 'json' ||
+				f.type === 'richText' ||
+				f.localized
+			)
+				jsonColumns.push(f.name);
+			else if (f.type === 'checkbox') boolColumns.push(f.name);
+		}
+		const columns = col.fields.map((f) => f.name);
+		if (col.versions) columns.push('_status');
+		return {
+			name: t.name,
+			autoId: t.autoId ?? false,
+			timestamps: t.timestamps ?? false,
+			jsonColumns,
+			boolColumns,
+			columns
+		};
 	}
 
 	// -------------------------------------------------------------------------

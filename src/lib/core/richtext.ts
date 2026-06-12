@@ -64,6 +64,68 @@ export function sanitizeInlineHtml(html: string): string {
 	return out;
 }
 
+// ---------------------------------------------------------------------------
+// Document-level HTML sanitizer (for `html` fields)
+// ---------------------------------------------------------------------------
+
+const ALLOWED_BLOCK = [
+	'p',
+	'h1',
+	'h2',
+	'h3',
+	'h4',
+	'ul',
+	'ol',
+	'li',
+	'blockquote',
+	'pre',
+	'hr',
+	'figure',
+	'figcaption',
+	'img',
+	'div',
+	'span',
+	'table',
+	'thead',
+	'tbody',
+	'tr',
+	'th',
+	'td'
+];
+
+/**
+ * Sanitize a full HTML document fragment: scripts/styles removed with their
+ * content, tag whitelist, attributes stripped except safe href/src/alt.
+ */
+export function sanitizeDocumentHtml(html: string): string {
+	if (typeof html !== 'string') return '';
+	let out = html
+		.replace(/<script[\s\S]*?<\/script\s*>/gi, '')
+		.replace(/<style[\s\S]*?<\/style\s*>/gi, '')
+		.replace(/<!--[\s\S]*?-->/g, '');
+
+	const allowed = [...ALLOWED_BLOCK, ...ALLOWED_INLINE].join('|');
+	out = out.replace(new RegExp(`<(?!\\/?(?:${allowed})(?:[\\s/>]))[^>]*>`, 'gi'), '');
+
+	// <a href>: safe scheme only. <img src/alt>: http(s) or site-relative.
+	out = out.replace(/<a\b[^>]*>/gi, (tag) => {
+		const m = tag.match(/href\s*=\s*("([^"]*)"|'([^']*)')/i);
+		const href = (m?.[2] ?? m?.[3] ?? '').trim();
+		if (!href || /^\s*javascript:/i.test(href)) return '<a>';
+		return `<a href="${href.replace(/"/g, '&quot;')}" rel="noopener">`;
+	});
+	out = out.replace(/<img\b[^>]*>/gi, (tag) => {
+		const src = (tag.match(/src\s*=\s*("([^"]*)"|'([^']*)')/i)?.[2] ?? '').trim();
+		const alt = (tag.match(/alt\s*=\s*("([^"]*)"|'([^']*)')/i)?.[2] ?? '').trim();
+		if (!src || /^\s*(javascript|data):/i.test(src)) return '';
+		return `<img src="${src.replace(/"/g, '&quot;')}" alt="${alt.replace(/"/g, '&quot;')}">`;
+	});
+	// Strip attributes from every other allowed tag.
+	const noAttr = [...ALLOWED_BLOCK, ...ALLOWED_INLINE].filter((t) => t !== 'a' && t !== 'img');
+	out = out.replace(new RegExp(`<(${noAttr.join('|')})\\b[^>]*>`, 'gi'), '<$1>');
+	return out;
+}
+
 /** Sanitize a full node array in place-safe fashion. Unknown nodes are dropped. */
 export function sanitizeNodes(value: unknown): RichTextNode[] {
 	if (!Array.isArray(value)) return [];

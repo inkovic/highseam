@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import BlocksInput from './BlocksInput.svelte';
 	import FieldInput from './FieldInput.svelte';
+	import HtmlInput from './HtmlInput.svelte';
 	import RichTextInput from './RichTextInput.svelte';
 	import type { ClientCollection } from './client';
 	import type { RelOption } from './server';
@@ -133,6 +134,9 @@
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'richText'}
 			<RichTextInput {field} value={values[field.name]} {relOptions} />
+			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
+		{:else if field.type === 'html'}
+			<HtmlInput {field} value={values[field.name]} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else}
 			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />

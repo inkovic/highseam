@@ -245,11 +245,47 @@ const pages = defineCollection({
 	]
 });
 
+/**
+ * Table-backed collection (Directus-style): maps onto an EXISTING SQL table
+ * in D1, one column per field — relational data owned by other pipelines
+ * gets the same admin/REST/GraphQL as everything else. In dev (JSON store)
+ * it behaves like a normal collection.
+ */
+const venues = defineCollection({
+	slug: 'venues',
+	table: { name: 'venues', autoId: true, timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
+	labels: { singular: 'Venue', plural: 'Venues' },
+	admin: {
+		useAsTitle: 'name',
+		defaultColumns: ['name', 'suburb', 'rating', 'dog_friendly'],
+		description: 'Backed by the relational `venues` table on D1 (column-per-field).'
+	},
+	access: {
+		read: () => true,
+		create: isLoggedIn,
+		update: isLoggedIn,
+		delete: isAdmin
+	},
+	fields: [
+		{ name: 'name', type: 'text', required: true },
+		{ name: 'slug', type: 'text', required: true, unique: true },
+		{ name: 'suburb', type: 'text' },
+		{ name: 'rating', type: 'number', min: 0, max: 5 },
+		{ name: 'dog_friendly', type: 'checkbox', defaultValue: true },
+		{
+			name: 'rich_html',
+			type: 'html',
+			admin: { description: 'HTML from the writer pipeline — sanitized on every save' }
+		},
+		{ name: 'tags', type: 'json' }
+	]
+});
+
 export default defineConfig({
 	admin: { title: 'svelte-payload' },
 	localization: { locales: ['en', 'es'], defaultLocale: 'en' },
 	plugins: [lastModifiedBy(['posts', 'pages'])],
-	collections: [users, posts, media, categories, pages],
+	collections: [users, posts, media, categories, pages, venues],
 	globals: [
 		{
 			slug: 'site-settings',

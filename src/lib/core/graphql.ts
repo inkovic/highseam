@@ -296,6 +296,7 @@ function fieldConfig(
 	switch (f.type) {
 		case 'text':
 		case 'textarea':
+		case 'html':
 		case 'email':
 		case 'date':
 		case 'select':
