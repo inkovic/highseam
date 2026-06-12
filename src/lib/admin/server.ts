@@ -5,6 +5,9 @@ import type { CollectionConfig, Doc, Field, ReqContext } from '$lib/core/types';
 export interface RelOption {
 	id: string;
 	title: string;
+	/** Present for upload collections (image previews in the admin). */
+	url?: string;
+	mimeType?: string;
 }
 
 /** Collect every collection slug referenced by relationship fields, recursively. */
@@ -14,6 +17,11 @@ function collectRelationTargets(fields: Field[], out: Set<string>): void {
 		if (field.type === 'array') collectRelationTargets(field.fields, out);
 		if (field.type === 'blocks')
 			for (const block of field.blocks) collectRelationTargets(block.fields, out);
+		if (field.type === 'richText') {
+			if (field.uploads) out.add(field.uploads);
+			for (const slug of field.relationships ?? []) out.add(slug);
+			for (const block of field.blocks ?? []) collectRelationTargets(block.fields, out);
+		}
 	}
 }
 
@@ -36,7 +44,11 @@ export async function loadRelOptions(
 		const titleKey = related.admin?.useAsTitle ?? (related.auth ? 'email' : 'id');
 		try {
 			const { docs } = await cms.find(req, slug, { limit: 100, sort: titleKey }, { depth: 0 });
-			out[slug] = docs.map((d: Doc) => ({ id: d.id, title: String(d[titleKey] ?? d.id) }));
+			out[slug] = docs.map((d: Doc) => ({
+				id: d.id,
+				title: String(d[titleKey] ?? d.id),
+				...(typeof d.url === 'string' ? { url: d.url, mimeType: String(d.mimeType ?? '') } : {})
+			}));
 		} catch {
 			out[slug] = [];
 		}

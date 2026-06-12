@@ -132,7 +132,7 @@
 			<BlocksInput {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'richText'}
-			<RichTextInput {field} value={values[field.name]} />
+			<RichTextInput {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else}
 			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />

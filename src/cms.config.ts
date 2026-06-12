@@ -122,7 +122,42 @@ const posts = defineCollection({
 		{ name: 'title', type: 'text', required: true, maxLength: 200, localized: true },
 		{ name: 'slug', type: 'text', unique: true, admin: { description: 'Auto-generated from title if left blank' } },
 		{ name: 'excerpt', type: 'textarea', maxLength: 400, localized: true },
-		{ name: 'content', type: 'richText', localized: true },
+		{
+			// Structured rich text with components INSIDE the document flow:
+			// images from media, embeds of other posts, and typed blocks.
+			name: 'content',
+			type: 'richText',
+			localized: true,
+			uploads: 'media',
+			relationships: ['posts'],
+			blocks: [
+				{
+					slug: 'callout',
+					labels: { singular: 'Callout', plural: 'Callouts' },
+					fields: [
+						{
+							name: 'tone',
+							type: 'select',
+							defaultValue: 'info',
+							options: [
+								{ label: 'Info', value: 'info' },
+								{ label: 'Warning', value: 'warning' },
+								{ label: 'Success', value: 'success' }
+							]
+						},
+						{ name: 'text', type: 'textarea', required: true }
+					]
+				},
+				{
+					slug: 'cta',
+					labels: { singular: 'Call to action', plural: 'CTAs' },
+					fields: [
+						{ name: 'label', type: 'text', required: true },
+						{ name: 'url', type: 'text', required: true }
+					]
+				}
+			]
+		},
 		{ name: 'author', type: 'relationship', relationTo: 'users' },
 		{ name: 'category', type: 'relationship', relationTo: 'categories' },
 		{ name: 'coverImage', type: 'upload', relationTo: 'media' },

@@ -1,5 +1,6 @@
 import type { CollectionConfig, Field } from './types';
 import { ValidationError } from './types';
+import { sanitizeNodes, validateRichTextNodes } from './richtext';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -18,13 +19,25 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			if (typeof value !== 'string' || !EMAIL_RE.test(value)) return 'Invalid email address';
 			break;
 		case 'text':
-		case 'textarea':
-		case 'richText': {
+		case 'textarea': {
 			if (typeof value !== 'string') return 'Must be a string';
 			if (field.minLength && value.length < field.minLength)
 				return `Must be at least ${field.minLength} characters`;
 			if (field.maxLength && value.length > field.maxLength)
 				return `Must be at most ${field.maxLength} characters`;
+			break;
+		}
+		case 'richText': {
+			if (typeof value === 'string') break; // legacy markdown
+			if (!Array.isArray(value)) return 'Must be a rich text node array or string';
+			const err = validateRichTextNodes(value as never, field, (block, fields) => {
+				for (const sub of block.fields) {
+					const subErr = validateField(sub, fields[sub.name], data);
+					if (subErr) return subErr;
+				}
+				return null;
+			});
+			if (err) return err;
 			break;
 		}
 		case 'number': {
@@ -160,6 +173,18 @@ function coerce(field: Field, value: unknown): unknown {
 			return value === 'on' || value === 'true' || value === true;
 		case 'upload':
 			return value;
+		case 'richText': {
+			let v = value;
+			if (typeof v === 'string' && v.trim().startsWith('[')) {
+				try {
+					v = JSON.parse(v);
+				} catch {
+					return v;
+				}
+			}
+			// Sanitize inline HTML server-side; legacy markdown strings pass through.
+			return Array.isArray(v) ? sanitizeNodes(v) : v;
+		}
 		case 'select':
 		case 'relationship':
 			if (field.hasMany && typeof value === 'string') {

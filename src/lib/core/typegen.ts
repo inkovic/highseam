@@ -23,10 +23,11 @@ function fieldType(f: Field, relNames: Map<string, string>): string {
 	switch (f.type) {
 		case 'text':
 		case 'textarea':
-		case 'richText':
 		case 'email':
 		case 'date':
 			return 'string';
+		case 'richText':
+			return 'import("$lib/core/richtext").RichTextNode[] | string';
 		case 'number':
 			return 'number';
 		case 'checkbox':
