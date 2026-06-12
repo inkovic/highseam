@@ -55,6 +55,12 @@ export interface BaseField {
 	label?: string;
 	required?: boolean;
 	unique?: boolean;
+	/**
+	 * Store a value per locale (requires `localization` in the top-level
+	 * config). Reads flatten to the requested locale with fallback to the
+	 * default locale; `locale=all` returns the raw per-locale object.
+	 */
+	localized?: boolean;
 	defaultValue?: unknown;
 	admin?: FieldAdminConfig;
 	/** Return true if valid, or an error message string. */
@@ -244,6 +250,12 @@ export interface VersionsConfig {
 	drafts?: boolean;
 	/** Versions kept per document (oldest pruned). Default 20. */
 	maxPerDoc?: number;
+	/**
+	 * Scheduled publishing: drafts with a `publishAt` date in the past are
+	 * auto-promoted to published (swept lazily on reads). Add a
+	 * `publishAt` date field to the collection to drive it.
+	 */
+	schedulePublish?: boolean;
 }
 
 export interface CollectionConfig {
@@ -369,10 +381,16 @@ export interface GlobalConfig {
  */
 export type Plugin = (config: CMSConfig) => CMSConfig;
 
+export interface LocalizationConfig {
+	locales: string[];
+	defaultLocale: string;
+}
+
 export interface CMSConfig {
 	collections: CollectionConfig[];
 	globals?: GlobalConfig[];
 	plugins?: Plugin[];
+	localization?: LocalizationConfig;
 	/** Secret for signing auth tokens. Override via env in production. */
 	secret?: string;
 	admin?: {

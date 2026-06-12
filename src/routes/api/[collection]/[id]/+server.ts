@@ -9,7 +9,8 @@ export const GET: RequestHandler = ({ locals, params, url }) =>
 		const draft = url.searchParams.get('draft') === 'true';
 		const doc = await locals.cms.findByID({ user: locals.user }, params.collection, params.id, {
 			depth,
-			draft
+			draft,
+			locale: url.searchParams.get('locale') ?? undefined
 		});
 		return json(doc);
 	});
@@ -20,7 +21,8 @@ export const PATCH: RequestHandler = ({ locals, params, request, url }) =>
 		const draft = url.searchParams.get('draft') === 'true';
 		const data = await readBody(request);
 		const doc = await locals.cms.update({ user: locals.user }, params.collection, params.id, data, {
-			draft
+			draft,
+			locale: url.searchParams.get('locale') ?? undefined
 		});
 		return json({ doc, message: draft ? 'Draft saved' : 'Updated' });
 	});

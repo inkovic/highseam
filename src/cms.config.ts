@@ -86,9 +86,9 @@ const categories = defineCollection({
 const posts = defineCollection({
 	slug: 'posts',
 	labels: { singular: 'Post', plural: 'Posts' },
-	// Drafts + version history: save drafts without touching the published
-	// doc, publish/unpublish, restore old versions.
-	versions: { drafts: true, maxPerDoc: 20 },
+	// Drafts + version history + scheduled publishing: drafts with a past
+	// `publishAt` date auto-promote on reads.
+	versions: { drafts: true, maxPerDoc: 20, schedulePublish: true },
 	admin: {
 		useAsTitle: 'title',
 		defaultColumns: ['title', '_status', 'author', 'publishedAt'],
@@ -119,14 +119,19 @@ const posts = defineCollection({
 		]
 	},
 	fields: [
-		{ name: 'title', type: 'text', required: true, maxLength: 200 },
+		{ name: 'title', type: 'text', required: true, maxLength: 200, localized: true },
 		{ name: 'slug', type: 'text', unique: true, admin: { description: 'Auto-generated from title if left blank' } },
-		{ name: 'excerpt', type: 'textarea', maxLength: 400 },
-		{ name: 'content', type: 'richText' },
+		{ name: 'excerpt', type: 'textarea', maxLength: 400, localized: true },
+		{ name: 'content', type: 'richText', localized: true },
 		{ name: 'author', type: 'relationship', relationTo: 'users' },
 		{ name: 'category', type: 'relationship', relationTo: 'categories' },
 		{ name: 'coverImage', type: 'upload', relationTo: 'media' },
 		{ name: 'featured', type: 'checkbox', defaultValue: false },
+		{
+			name: 'publishAt',
+			type: 'date',
+			admin: { description: 'Scheduled publishing: drafts auto-publish after this date' }
+		},
 		{ name: 'publishedAt', type: 'date', admin: { readOnly: true } }
 	]
 });
@@ -207,6 +212,7 @@ const pages = defineCollection({
 
 export default defineConfig({
 	admin: { title: 'svelte-payload' },
+	localization: { locales: ['en', 'es'], defaultLocale: 'en' },
 	plugins: [lastModifiedBy(['posts', 'pages'])],
 	collections: [users, posts, media, categories, pages],
 	globals: [
