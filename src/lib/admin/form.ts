@@ -5,7 +5,8 @@ export function formToData(form: FormData, col: CollectionConfig): Record<string
 	const data: Record<string, unknown> = {};
 	for (const field of col.fields) {
 		const hasMany =
-			(field.type === 'select' || field.type === 'relationship') && Boolean(field.hasMany);
+			(field.type === 'select' || field.type === 'relationship' || field.type === 'upload') &&
+			Boolean(field.hasMany);
 		if (hasMany) {
 			if (form.has(field.name)) {
 				data[field.name] = form.getAll(field.name).map(String).filter(Boolean);

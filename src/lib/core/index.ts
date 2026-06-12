@@ -30,3 +30,7 @@ export function defineConfig(config: CMSConfig): CMSConfig {
 export function defineCollection(config: CollectionConfig): CollectionConfig {
 	return config;
 }
+
+export function defineGlobal(config: import('./types').GlobalConfig): import('./types').GlobalConfig {
+	return config;
+}

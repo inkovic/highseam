@@ -59,6 +59,13 @@
 	}
 
 	const visibleFields = $derived(collection.fields.filter((f) => !f.admin.hidden));
+	// Field grouping: ungrouped fields render first, then one collapsible
+	// section per admin.group (in first-appearance order).
+	const ungroupedFields = $derived(visibleFields.filter((f) => !f.admin.group));
+	const groupNames = $derived([
+		...new Set(visibleFields.filter((f) => f.admin.group).map((f) => f.admin.group!))
+	]);
+	const fieldsInGroup = (g: string) => visibleFields.filter((f) => f.admin.group === g);
 	const inputClass =
 		'w-full rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-sm focus:border-(--color-primary) focus:outline-none';
 	const isEdit = $derived(Boolean(values.id));
@@ -128,7 +135,7 @@
 		</div>
 	{/if}
 
-	{#each visibleFields as field (field.name)}
+	{#snippet fieldRow(field: (typeof collection.fields)[number])}
 		{#if field.type === 'blocks' || field.type === 'array'}
 			<BlocksInput {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
@@ -141,6 +148,27 @@
 		{:else}
 			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />
 		{/if}
+	{/snippet}
+
+	{#each ungroupedFields as field (field.name)}
+		{@render fieldRow(field)}
+	{/each}
+
+	{#each groupNames as group (group)}
+		<details
+			open
+			class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate)/40 [&[open]>summary]:border-b [&[open]>summary]:border-(--color-border)"
+		>
+			<summary class="cursor-pointer px-4 py-2.5 text-xs font-semibold tracking-widest text-(--color-muted) uppercase select-none hover:text-(--color-fg)">
+				{group}
+				<span class="ml-1 font-normal opacity-60">({fieldsInGroup(group).length})</span>
+			</summary>
+			<div class="space-y-5 p-4">
+				{#each fieldsInGroup(group) as field (field.name)}
+					{@render fieldRow(field)}
+				{/each}
+			</div>
+		</details>
 	{/each}
 
 	{#if message}

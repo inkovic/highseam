@@ -12,7 +12,13 @@ export interface ClientField {
 	required: boolean;
 	unique: boolean;
 	defaultValue?: unknown;
-	admin: { description?: string; placeholder?: string; readOnly?: boolean; hidden?: boolean };
+	admin: {
+		description?: string;
+		placeholder?: string;
+		readOnly?: boolean;
+		hidden?: boolean;
+		group?: string;
+	};
 	// type-specific
 	options?: SelectOption[];
 	hasMany?: boolean;
@@ -48,6 +54,7 @@ export interface ClientCollection {
 	drafts: boolean;
 	upload: boolean;
 	uploadAccept?: string;
+	actions: { label: string; url: string; confirm?: string }[];
 	fields: ClientField[];
 }
 
@@ -70,7 +77,8 @@ function toClientField(f: Field): ClientField {
 			description: f.admin?.description,
 			placeholder: f.admin?.placeholder,
 			readOnly: f.admin?.readOnly,
-			hidden: f.admin?.hidden
+			hidden: f.admin?.hidden,
+			group: f.admin?.group
 		}
 	};
 	if (f.type === 'select') {
@@ -81,7 +89,10 @@ function toClientField(f: Field): ClientField {
 		base.relationTo = f.relationTo;
 		base.hasMany = f.hasMany;
 	}
-	if (f.type === 'upload') base.relationTo = f.relationTo;
+	if (f.type === 'upload') {
+		base.relationTo = f.relationTo;
+		base.hasMany = f.hasMany;
+	}
 	if (f.type === 'array') base.fields = f.fields.map(toClientField);
 	if (f.type === 'blocks') {
 		base.blocks = f.blocks.map((b) => ({
@@ -126,6 +137,7 @@ export function toClientCollection(col: CollectionConfig): ClientCollection {
 			typeof col.upload === 'object' && col.upload.mimeTypes
 				? col.upload.mimeTypes.map((m) => (m.endsWith('/') ? `${m}*` : m)).join(',')
 				: undefined,
+		actions: col.admin?.actions ?? [],
 		useAsTitle,
 		defaultColumns:
 			col.admin?.defaultColumns ??
@@ -155,6 +167,7 @@ export function toClientGlobal(g: import('$lib/core/types').GlobalConfig): Clien
 		versioned: false,
 		drafts: false,
 		upload: false,
+		actions: [],
 		fields: g.fields.map(toClientField)
 	};
 }
