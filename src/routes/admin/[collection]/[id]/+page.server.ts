@@ -50,6 +50,17 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		// Document locking: try to take the edit lock.
 		const lock = await cms.takeLock(params.collection, params.id, user);
 
+		// Live preview: mint a short-lived token and resolve the public URL.
+		let previewUrl: string | null = null;
+		if (col.admin?.preview) {
+			const token = await cms.signPreviewToken(params.collection, params.id);
+			try {
+				previewUrl = col.admin.preview.url(doc, token);
+			} catch {
+				previewUrl = null;
+			}
+		}
+
 		return {
 			collection: client,
 			doc: formDoc,
@@ -60,7 +71,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			locale: locale ?? cms.config.localization?.defaultLocale ?? null,
 			locales: cms.config.localization?.locales ?? [],
 			hasLocalizedFields: col.fields.some((f) => f.localized),
-			lockedBy: lock.lockedBy
+			lockedBy: lock.lockedBy,
+			previewUrl
 		};
 	} catch (err) {
 		if (err instanceof APIError) error(err.status, err.message);

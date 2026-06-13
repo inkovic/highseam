@@ -49,10 +49,14 @@ export interface FieldAdminConfig {
 	/** Hide from the auto-generated admin UI (still present in the API). */
 	hidden?: boolean;
 	/**
-	 * Group name: fields sharing a group render inside a collapsible section
-	 * in the edit form (essential for wide table-backed collections).
+	 * Group name: fields sharing a group render together (collapsible section
+	 * or tab, per the collection's groupsAs).
 	 */
 	group?: string;
+	/** Place this field in the right-hand meta sidebar instead of the main column. */
+	position?: 'sidebar';
+	/** Render hint: 'image' shows a thumbnail preview for a URL/text field. */
+	preview?: 'image';
 }
 
 export interface BaseField {
@@ -262,6 +266,20 @@ export interface CollectionAdminConfig {
 	hidden?: boolean;
 	/** Lucide-ish icon name hint (decorative only). */
 	group?: string;
+	/** Render field groups as top tabs or stacked collapsible sections. Default 'sections'. */
+	groupsAs?: 'tabs' | 'sections';
+	/**
+	 * Field names that render faceted filter controls in the list view
+	 * (combinable; mapped to `where` queries — SQL in table mode).
+	 */
+	filters?: string[];
+	/**
+	 * Live preview: returns the public URL to show in the admin's preview
+	 * pane for a document. Receives a short-lived preview token to append
+	 * (your front end verifies it with svelte-payload/preview). Runs
+	 * server-side — the CMS never learns your route shape.
+	 */
+	preview?: { url: (doc: Doc, token: string) => string };
 	/**
 	 * Custom document actions: buttons on the edit page that POST
 	 * `{ collection, id }` (JSON) to your endpoint — the hook bus surfaced
@@ -476,6 +494,8 @@ export interface CMSConfig {
 	admin?: {
 		/** Title shown in the admin UI. */
 		title?: string;
+		/** Admin color scheme. Default 'system'. */
+		theme?: 'light' | 'dark' | 'system';
 	};
 }
 

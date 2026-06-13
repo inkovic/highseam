@@ -66,6 +66,9 @@
 			readonly={field.admin.readOnly}
 			disabled={field.admin.readOnly}
 		/>
+		{#if field.admin.preview === 'image' && asString(value)}
+			<img src={asString(value)} alt={field.label} class="mt-2 max-h-40 rounded-(--radius) border border-(--color-border)" />
+		{/if}
 	{:else if field.type === 'textarea'}
 		<textarea
 			id={field.name}

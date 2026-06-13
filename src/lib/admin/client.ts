@@ -18,6 +18,8 @@ export interface ClientField {
 		readOnly?: boolean;
 		hidden?: boolean;
 		group?: string;
+		position?: 'sidebar';
+		preview?: 'image';
 	};
 	// type-specific
 	options?: SelectOption[];
@@ -55,6 +57,9 @@ export interface ClientCollection {
 	upload: boolean;
 	uploadAccept?: string;
 	actions: { label: string; url: string; confirm?: string }[];
+	groupsAs: 'tabs' | 'sections';
+	filters: string[];
+	hasPreview: boolean;
 	fields: ClientField[];
 }
 
@@ -78,7 +83,9 @@ function toClientField(f: Field): ClientField {
 			placeholder: f.admin?.placeholder,
 			readOnly: f.admin?.readOnly,
 			hidden: f.admin?.hidden,
-			group: f.admin?.group
+			group: f.admin?.group,
+			position: f.admin?.position,
+			preview: f.admin?.preview
 		}
 	};
 	if (f.type === 'select') {
@@ -138,6 +145,9 @@ export function toClientCollection(col: CollectionConfig): ClientCollection {
 				? col.upload.mimeTypes.map((m) => (m.endsWith('/') ? `${m}*` : m)).join(',')
 				: undefined,
 		actions: col.admin?.actions ?? [],
+		groupsAs: col.admin?.groupsAs ?? 'sections',
+		filters: col.admin?.filters ?? [],
+		hasPreview: Boolean(col.admin?.preview),
 		useAsTitle,
 		defaultColumns:
 			col.admin?.defaultColumns ??
@@ -168,6 +178,9 @@ export function toClientGlobal(g: import('$lib/core/types').GlobalConfig): Clien
 		drafts: false,
 		upload: false,
 		actions: [],
+		groupsAs: 'sections',
+		filters: [],
+		hasPreview: false,
 		fields: g.fields.map(toClientField)
 	};
 }

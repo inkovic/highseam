@@ -149,6 +149,41 @@ npm run deploy
 
 Set a strong `CMS_SECRET` (Pages env var). The CMS auto-detects the D1 binding.
 
+## Live preview (two separate apps, one database)
+
+Add `admin.preview.url(doc, token)` to a collection — it returns the public
+URL the admin shows in a preview pane (form left, resizable iframe right; the
+function runs server-side so the CMS never learns your route shape). The admin
+mints a short-lived token signed with `CMS_SECRET`; your public site (a
+separate deploy sharing the DB) verifies it and renders unpublished content:
+
+```ts
+// public site — src/routes/[type]/[slug]/+page.server.ts
+import { verifyPreviewToken } from 'svelte-payload/preview';
+const claims = await verifyPreviewToken(env.CMS_SECRET, url.searchParams.get('token'));
+const doc = claims ? await readDraft(claims.collection, claims.id) : await readPublished(slug);
+```
+
+Two modes: the iframe reloads on save (Mode A), and the form postMessages the
+in-progress doc as you type for true live preview (Mode B) — subscribe with
+`onPreviewData(cb)`. Drop `<PreviewBanner/>` (from
+`svelte-payload/PreviewBanner.svelte`) into the previewed page. See
+`src/routes/preview/venues/[id]` for a working reference.
+
+## Admin: theming, tabs, filters, bulk
+
+- **Theme** — `admin.theme: 'light' | 'dark' | 'system'`. Every color is a
+  `--color-*` CSS variable a consumer can override; the editor surface is its
+  own `--sp-canvas` token.
+- **Form layout** — `admin.group` on fields + `admin.groupsAs: 'tabs'`
+  turns a 60-field form into tabs; `admin.position: 'sidebar'` pulls meta
+  fields into a side column.
+- **Filters** — `admin.filters: [...]` renders faceted, combinable controls
+  (select / boolean / has-content / contains) that build `where` queries,
+  URL-synced. Straight SQL for table-backed collections.
+- **Bulk** — select rows → publish / unpublish / delete / run a document
+  action across the selection.
+
 ## Table-backed collections (sit on top of an existing database)
 
 The D1 adapter has two modes. Default is schema-less JSON documents; add

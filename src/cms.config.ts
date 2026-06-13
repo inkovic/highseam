@@ -260,7 +260,13 @@ const venues = defineCollection({
 		defaultColumns: ['name', 'suburb', 'rating', 'dog_friendly'],
 		description: 'Backed by the relational `venues` table on D1 (column-per-field).',
 		// Custom document action: the hook bus surfaced in the UI.
-		actions: [{ label: '✨ Enrich with AI', url: '/api/enrich-venue' }]
+		actions: [{ label: '✨ Enrich with AI', url: '/api/enrich-venue' }],
+		// Faceted filters + tabbed form (essential for wide tables).
+		filters: ['suburb', 'dog_friendly', 'rich_html'],
+		groupsAs: 'tabs',
+		// Live preview: the CMS mints a token; this returns the public URL.
+		// (Demo points at our own /posts route as a stand-in target.)
+		preview: { url: (doc, token) => `/preview/venues/${doc.id}?token=${token}` }
 	},
 	access: {
 		read: () => true,
@@ -272,15 +278,15 @@ const venues = defineCollection({
 		{ name: 'name', type: 'text', required: true },
 		{ name: 'slug', type: 'text', required: true, unique: true },
 		// admin.group: collapsible sections — tames wide table-backed forms
-		{ name: 'suburb', type: 'text', admin: { group: 'Details' } },
-		{ name: 'rating', type: 'number', min: 0, max: 5, admin: { group: 'Details' } },
-		{ name: 'dog_friendly', type: 'checkbox', defaultValue: true, admin: { group: 'Details' } },
+		{ name: 'suburb', type: 'text', admin: { group: 'Location' } },
+		{ name: 'rating', type: 'number', min: 0, max: 5, admin: { position: 'sidebar' } },
+		{ name: 'dog_friendly', type: 'checkbox', defaultValue: true, admin: { position: 'sidebar' } },
 		{
 			name: 'rich_html',
 			type: 'html',
 			admin: { group: 'Content', description: 'HTML from the writer pipeline — sanitized on every save' }
 		},
-		{ name: 'tags', type: 'json', admin: { group: 'Content' } }
+		{ name: 'tags', type: 'json', admin: { group: 'Data' } }
 	]
 });
 

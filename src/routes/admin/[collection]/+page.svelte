@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { page as pageState } from '$app/state';
 	import { displayValue } from '$lib/admin/client';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const columns = $derived(
 		data.collection.defaultColumns.filter(
@@ -16,20 +18,32 @@
 		)
 	);
 
+	/** Preserve all current query params (search + facets) when changing one. */
+	function linkWith(overrides: Record<string, string | null>): string {
+		const params = new URLSearchParams(pageState.url.searchParams);
+		for (const [k, v] of Object.entries(overrides)) {
+			if (v === null || v === '') params.delete(k);
+			else params.set(k, v);
+		}
+		return `?${params.toString()}`;
+	}
 	function sortLink(col: string): string {
-		const next = data.sort === col ? `-${col}` : col;
-		const params = new URLSearchParams();
-		if (data.search) params.set('q', data.search);
-		params.set('sort', next);
-		return `?${params.toString()}`;
+		return linkWith({ sort: data.sort === col ? `-${col}` : col, page: null });
 	}
-	function pageLink(p: number): string {
-		const params = new URLSearchParams();
-		if (data.search) params.set('q', data.search);
-		if (data.sort !== '-createdAt') params.set('sort', data.sort);
-		params.set('page', String(p));
-		return `?${params.toString()}`;
+
+	// --- row selection / bulk ---
+	let selected = $state<Set<string>>(new Set());
+	const allOnPage = $derived(data.result.docs.map((d) => String(d.id)));
+	const allSelected = $derived(allOnPage.length > 0 && allOnPage.every((id) => selected.has(id)));
+	function toggle(id: string) {
+		const next = new Set(selected);
+		next.has(id) ? next.delete(id) : next.add(id);
+		selected = next;
 	}
+	function toggleAll() {
+		selected = allSelected ? new Set() : new Set(allOnPage);
+	}
+	const action = $derived(data.collection.actions[0]);
 </script>
 
 <div class="mb-6 flex items-center justify-between gap-4">
@@ -45,20 +59,77 @@
 	</a>
 </div>
 
-<form method="GET" class="mb-4">
+<!-- search + facets (GET form keeps state in the URL) -->
+<form method="GET" class="mb-4 flex flex-wrap items-end gap-2">
 	<input
 		type="search"
 		name="q"
 		value={data.search}
 		placeholder="Search by {data.collection.useAsTitle}…"
-		class="w-72 rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-sm placeholder-(--color-muted) focus:border-(--color-primary) focus:outline-none"
+		class="w-60 rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-sm placeholder-(--color-muted) focus:border-(--color-primary) focus:outline-none"
 	/>
+	{#each data.facets as facet (facet.name)}
+		<div class="flex flex-col gap-0.5">
+			<label class="text-[10px] tracking-wide text-(--color-muted) uppercase" for="f_{facet.name}">{facet.label}</label>
+			{#if facet.kind === 'select'}
+				<select id="f_{facet.name}" name="f_{facet.name}" value={facet.value} class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm focus:border-(--color-primary) focus:outline-none">
+					<option value="">Any</option>
+					{#each facet.options ?? [] as opt (opt.value)}<option value={opt.value}>{opt.label}</option>{/each}
+				</select>
+			{:else if facet.kind === 'boolean'}
+				<select id="f_{facet.name}" name="f_{facet.name}" value={facet.value} class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm focus:border-(--color-primary) focus:outline-none">
+					<option value="">Any</option>
+					<option value="true">Yes</option>
+					<option value="false">No</option>
+				</select>
+			{:else if facet.kind === 'exists'}
+				<select id="f_{facet.name}" name="f_{facet.name}" value={facet.value} class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm focus:border-(--color-primary) focus:outline-none">
+					<option value="">Any</option>
+					<option value="true">Has content</option>
+					<option value="false">Empty</option>
+				</select>
+			{:else}
+				<input id="f_{facet.name}" name="f_{facet.name}" value={facet.value} placeholder="contains…" class="w-32 rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm focus:border-(--color-primary) focus:outline-none" />
+			{/if}
+		</div>
+	{/each}
+	{#if data.sort !== '-createdAt'}<input type="hidden" name="sort" value={data.sort} />{/if}
+	<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm hover:bg-(--color-elevate)">Apply</button>
+	{#if data.search || data.facets.some((f) => f.value)}
+		<a href="?" class="px-2 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">Clear</a>
+	{/if}
 </form>
+
+{#if form?.bulk}
+	<div class="mb-3 rounded-(--radius) border border-(--color-success) bg-(--color-elevate) px-4 py-2 text-sm text-(--color-success)">
+		Bulk {form.bulk.op}: {form.bulk.ok} succeeded{form.bulk.failed ? `, ${form.bulk.failed} failed` : ''}.
+	</div>
+{/if}
+
+<!-- bulk toolbar -->
+{#if selected.size > 0}
+	<form method="POST" action="?/bulk" use:enhance={() => async ({ update }) => { selected = new Set(); await update(); }} class="mb-3 flex flex-wrap items-center gap-2 rounded-(--radius) border border-(--color-primary) bg-(--color-elevate) px-3 py-2">
+		<span class="text-sm font-medium">{selected.size} selected</span>
+		{#each [...selected] as id (id)}<input type="hidden" name="ids" value={id} />{/each}
+		{#if data.collection.drafts}
+			<button name="op" value="publish" class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Publish</button>
+			<button name="op" value="unpublish" class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Unpublish</button>
+		{/if}
+		{#if action}
+			<input type="hidden" name="actionUrl" value={action.url} />
+			<button name="op" value="action" class="rounded border border-(--color-primary) px-2.5 py-1 text-xs text-(--color-primary) hover:bg-(--color-primary) hover:text-(--color-primary-fg)">{action.label} ({selected.size})</button>
+		{/if}
+		<button name="op" value="delete" onclick={(e) => { if (!confirm(`Delete ${selected.size} document(s)?`)) e.preventDefault(); }} class="rounded border border-(--color-danger) px-2.5 py-1 text-xs text-(--color-danger) hover:bg-(--color-danger) hover:text-white">Delete</button>
+	</form>
+{/if}
 
 <div class="overflow-x-auto rounded-xl border border-(--color-border)">
 	<table class="w-full text-left text-sm">
 		<thead class="bg-(--color-elevate) text-xs tracking-wide text-(--color-muted) uppercase">
 			<tr>
+				<th class="w-10 px-4 py-3">
+					<input type="checkbox" checked={allSelected} onchange={toggleAll} class="h-4 w-4 accent-(--color-primary)" />
+				</th>
 				{#each columns as colName (colName)}
 					<th class="px-4 py-3 font-medium">
 						<a href={sortLink(colName)} class="hover:text-(--color-fg)">
@@ -72,6 +143,9 @@
 		<tbody class="divide-y divide-(--color-border)">
 			{#each data.result.docs as doc (doc.id)}
 				<tr class="bg-(--color-bg) hover:bg-(--color-elevate)">
+					<td class="px-4 py-3">
+						<input type="checkbox" checked={selected.has(String(doc.id))} onchange={() => toggle(String(doc.id))} class="h-4 w-4 accent-(--color-primary)" />
+					</td>
 					{#each columns as colName, i (colName)}
 						<td class="px-4 py-3 {i === 0 ? 'font-medium' : 'text-(--color-muted)'}">
 							{#if i === 0}
@@ -84,16 +158,14 @@
 						</td>
 					{/each}
 					<td class="px-4 py-3 text-right">
-						<a href="/admin/{data.collection.slug}/{doc.id}" class="text-xs text-(--color-muted) hover:text-(--color-fg)">
-							Edit →
-						</a>
+						<a href="/admin/{data.collection.slug}/{doc.id}" class="text-xs text-(--color-muted) hover:text-(--color-fg)">Edit →</a>
 					</td>
 				</tr>
 			{:else}
 				<tr>
-					<td colspan={columns.length + 1} class="px-4 py-12 text-center text-(--color-muted)">
-						No documents yet.
-						<a href="/admin/{data.collection.slug}/create" class="text-(--color-primary) hover:underline">Create the first one</a>
+					<td colspan={columns.length + 2} class="px-4 py-12 text-center text-(--color-muted)">
+						No documents match.
+						<a href="/admin/{data.collection.slug}/create" class="text-(--color-primary) hover:underline">Create one</a>
 					</td>
 				</tr>
 			{/each}
@@ -104,11 +176,11 @@
 {#if data.result.totalPages > 1}
 	<div class="mt-4 flex items-center gap-2 text-sm">
 		{#if data.result.hasPrevPage}
-			<a href={pageLink(data.result.page - 1)} class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 hover:bg-(--color-elevate)">← Prev</a>
+			<a href={linkWith({ page: String(data.result.page - 1) })} class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 hover:bg-(--color-elevate)">← Prev</a>
 		{/if}
 		<span class="text-(--color-muted)">Page {data.result.page} of {data.result.totalPages}</span>
 		{#if data.result.hasNextPage}
-			<a href={pageLink(data.result.page + 1)} class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 hover:bg-(--color-elevate)">Next →</a>
+			<a href={linkWith({ page: String(data.result.page + 1) })} class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 hover:bg-(--color-elevate)">Next →</a>
 		{/if}
 	</div>
 {/if}
