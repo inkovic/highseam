@@ -1,7 +1,13 @@
 @import "tailwindcss";
 
+/*
+ * Admin design tokens. Tailwind v4 generates the utilities (bg-(--color-bg)
+ * etc.) from these defaults; the [data-sp-theme] blocks below re-assign the
+ * same CSS variables at runtime, so light/dark switch live. Consumers can
+ * override any --color-* / --sp-* token in their own stylesheet to rebrand.
+ */
 @theme {
-  /* Payload-inspired dark admin palette */
+  /* default = dark */
   --color-bg: #0b0c0e;
   --color-elevate: #141518;
   --color-elevate-2: #1d1f23;
@@ -12,9 +18,47 @@
   --color-primary-fg: #101203;
   --color-danger: #ef4444;
   --color-success: #34d399;
+  /* editor/writing surface — its own token so it can stay "paper" in a dark
+     shell, or be overridden. Defaults to the elevated surface. */
+  --sp-canvas: var(--color-elevate);
+  --sp-canvas-fg: var(--color-fg);
   --radius: 0.5rem;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Explicit light theme */
+[data-sp-theme="light"] {
+  --color-bg: #ffffff;
+  --color-elevate: #f7f8fa;
+  --color-elevate-2: #eef0f3;
+  --color-border: #e1e4e8;
+  --color-fg: #1a1c1f;
+  --color-muted: #6b7280;
+  --color-primary: #4f46e5;
+  --color-primary-fg: #ffffff;
+  --color-danger: #dc2626;
+  --color-success: #059669;
+  --sp-canvas: #ffffff;
+  --sp-canvas-fg: #1a1c1f;
+}
+
+/* System: follow the OS when theme is unset/system */
+@media (prefers-color-scheme: light) {
+  [data-sp-theme="system"] {
+    --color-bg: #ffffff;
+    --color-elevate: #f7f8fa;
+    --color-elevate-2: #eef0f3;
+    --color-border: #e1e4e8;
+    --color-fg: #1a1c1f;
+    --color-muted: #6b7280;
+    --color-primary: #4f46e5;
+    --color-primary-fg: #ffffff;
+    --color-danger: #dc2626;
+    --color-success: #059669;
+    --sp-canvas: #ffffff;
+    --sp-canvas-fg: #1a1c1f;
+  }
 }
 
 body {

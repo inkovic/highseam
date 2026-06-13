@@ -13,6 +13,54 @@
 		data.hasLocalizedFields && data.locale ? `&locale=${data.locale}` : ''
 	);
 
+	// --- Live preview ---
+	let showPreview = $state(false);
+	let iframeEl: HTMLIFrameElement | undefined = $state();
+	let formWrap: HTMLDivElement | undefined = $state();
+	let previewReady = $state(false);
+
+	/** Serialize the edit form into a plain doc for Mode B (live) preview. */
+	function formDoc(): Record<string, unknown> {
+		const f = formWrap?.querySelector('form');
+		if (!f) return {};
+		const out: Record<string, unknown> = { ...data.doc };
+		for (const [k, v] of new FormData(f).entries()) {
+			if (typeof v !== 'string') continue;
+			try {
+				out[k] = v.trim().startsWith('[') || v.trim().startsWith('{') ? JSON.parse(v) : v;
+			} catch {
+				out[k] = v;
+			}
+		}
+		return out;
+	}
+	let pushTimer: ReturnType<typeof setTimeout> | undefined;
+	function pushPreview() {
+		if (!showPreview || !previewReady) return;
+		clearTimeout(pushTimer);
+		pushTimer = setTimeout(() => {
+			iframeEl?.contentWindow?.postMessage(
+				{ type: 'svelte-payload:preview', doc: formDoc() },
+				'*'
+			);
+		}, 300);
+	}
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onMsg = (e: MessageEvent) => {
+			if ((e.data as { type?: string })?.type === 'svelte-payload:preview-ready') {
+				previewReady = true;
+				pushPreview();
+			}
+		};
+		window.addEventListener('message', onMsg);
+		return () => window.removeEventListener('message', onMsg);
+	});
+	// Reload the iframe after a save (Mode A).
+	$effect(() => {
+		if (form?.saved && iframeEl) iframeEl.src = iframeEl.src;
+	});
+
 	// Custom document actions (collection.admin.actions): POST {collection,id}
 	// to a consumer endpoint — the hook bus surfaced in the UI.
 	let actionState = $state<Record<string, string>>({});
@@ -70,6 +118,18 @@
 		</p>
 	</div>
 	<div class="flex shrink-0 items-center gap-2">
+		{#if data.previewUrl}
+			<button
+				type="button"
+				onclick={() => (showPreview = !showPreview)}
+				class="rounded-(--radius) border px-3 py-1.5 text-sm {showPreview
+					? 'border-(--color-primary) text-(--color-primary)'
+					: 'border-(--color-border) text-(--color-muted) hover:text-(--color-fg)'}"
+			>
+				{showPreview ? 'Hide preview' : 'Preview'}
+			</button>
+			<a href={data.previewUrl} target="_blank" rel="noopener" class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)" title="Open on site">↗</a>
+		{/if}
 		{#if data.hasLocalizedFields && data.locales.length > 0}
 			<select
 				class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm text-(--color-fg) focus:border-(--color-primary) focus:outline-none"
@@ -128,7 +188,7 @@
 {/if}
 
 <div class="flex flex-wrap gap-10">
-	<div class="min-w-0 flex-1">
+	<div bind:this={formWrap} oninput={pushPreview} class="min-w-0 flex-1">
 		<DocForm
 			collection={data.collection}
 			values={data.doc}
@@ -141,6 +201,20 @@
 			autosave={data.collection.drafts}
 		/>
 	</div>
+
+	{#if showPreview && data.previewUrl}
+		<div class="min-w-80 flex-1 basis-[480px]">
+			<div class="sticky top-4">
+				<p class="mb-2 text-xs font-semibold tracking-widest text-(--color-muted) uppercase">Live preview</p>
+				<iframe
+					bind:this={iframeEl}
+					src={data.previewUrl}
+					title="Live preview"
+					class="h-[70vh] w-full resize-y rounded-(--radius) border border-(--color-border) bg-white"
+				></iframe>
+			</div>
+		</div>
+	{/if}
 
 	{#if data.collection.versioned && data.versions.length > 0}
 		<aside class="w-72 shrink-0">

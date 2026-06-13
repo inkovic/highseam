@@ -1,6 +1,6 @@
 {
 	"name": "svelte-payload",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Payload-inspired headless CMS for SvelteKit: config-driven collections, generated REST + GraphQL + admin panel, drafts, localization, uploads. Runs on Node and Cloudflare Workers.",
 	"license": "MIT",
 	"type": "module",

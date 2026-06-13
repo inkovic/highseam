@@ -4,6 +4,33 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.3.0 — 2026-06-12
+
+Live preview, theming, and directory-scale admin (8k-row feedback, round 2).
+
+- **Live Preview** — `admin.preview.url(doc, token)` on a collection. The
+  admin mints a short-lived HS256 token (your `CMS_SECRET`) and shows a
+  resizable preview iframe beside the form: reloads on save (Mode A) and
+  postMessages the in-progress doc as you type (Mode B). New front-end export
+  **`svelte-payload/preview`** (`verifyPreviewToken`, `onPreviewData`,
+  `isPreviewing`) + **`svelte-payload/PreviewBanner.svelte`** — wire the
+  public site in ~10 lines. `src/routes/preview/venues/[id]` is a reference
+  implementation.
+- **Theming** — `admin.theme: 'light' | 'dark' | 'system'` (default system).
+  All colors are overridable `--color-*` tokens; the editor canvas is its own
+  `--sp-canvas` token so it can stay "paper" in a dark shell — or not.
+- **Tabs + sidebar** — `admin.groupsAs: 'tabs' | 'sections'`; per-field
+  `admin.position: 'sidebar'` for a meta column.
+- **Faceted filters** — `admin.filters: ['suburb', 'dog_friendly', ...]`
+  renders combinable controls (select / yes-no / has-content / contains) that
+  build `where` queries (straight SQL in table mode), with URL-synced state.
+- **Bulk actions** — row select → bulk publish / unpublish / delete, and bulk
+  **run a document action** (e.g. enrich 50 rows).
+- **Image-preview fields** (`admin.preview: 'image'`), per-doc "Open on site"
+  link, `upload hasMany` galleries.
+- Stub change: list + edit page stubs gained filters/bulk/preview — re-copy
+  from `templates/` to pick them up in an existing app.
+
 ## 0.2.0 — 2026-06-12
 
 Adoption feedback release (driven by a real 8,400-row deployment).

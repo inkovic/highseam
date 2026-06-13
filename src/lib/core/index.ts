@@ -10,6 +10,7 @@ export { hashPassword, verifyPassword, signJWT, verifyJWT } from './crypto';
 export { validateData, sanitizeData, applyDefaults } from './validate';
 export { generateTypes } from './typegen';
 export { getSchema } from './graphql';
+export { sanitizeDocumentHtml, sanitizeNodes, extractRichTextRefs } from './richtext';
 
 /**
  * Validate the config and apply plugins (each plugin is a config transform,

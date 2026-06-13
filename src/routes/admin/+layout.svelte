@@ -14,6 +14,7 @@
 	<title>{data.title} — Admin</title>
 </svelte:head>
 
+<div data-sp-theme={data.theme} class="min-h-screen bg-(--color-bg) text-(--color-fg)">
 {#if data.user}
 	<div class="flex min-h-screen">
 		<aside class="flex w-60 shrink-0 flex-col border-r border-(--color-border) bg-(--color-elevate)">
@@ -71,3 +72,4 @@
 		{@render children()}
 	</main>
 {/if}
+</div>

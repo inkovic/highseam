@@ -836,6 +836,15 @@ export class CMS {
 		return clean;
 	}
 
+	/**
+	 * Mint a short-lived preview token for a document (signed with CMS_SECRET).
+	 * The public site verifies it with `verifyPreviewToken` from
+	 * 'svelte-payload/preview' and serves draft/unpublished content.
+	 */
+	async signPreviewToken(collection: string, id: string, ttlSeconds = 600): Promise<string> {
+		return signJWT({ sub: id, col: collection, preview: true }, this.secret, ttlSeconds);
+	}
+
 	/** Resolve a token to its user document, or null. */
 	async authenticate(token: string | undefined | null): Promise<Doc | null> {
 		if (!token) return null;
