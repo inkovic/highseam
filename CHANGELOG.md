@@ -4,6 +4,24 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.3.1 — 2026-06-13
+
+Editing-loop polish (no new systems — tightening the daily experience).
+
+- **Searchable reference picker** — relationship/upload fields now use a
+  type-to-filter picker with removable chips (single + hasMany), replacing the
+  raw `<select multiple>`. Filters the loaded option list client-side, so it's
+  fine against large targets. Image options show thumbnails.
+- **Toasts + action UX** — a toast system replaces inline save banners;
+  document actions show an inline spinner while running, honor the `confirm`
+  flag, disable during the request, and surface the returned message as a
+  toast (then refresh the doc + preview).
+- **Unsaved-changes guard + ⌘/Ctrl-S** — the edit form tracks dirty state and
+  warns before in-app navigation or tab close; Cmd/Ctrl-S saves. The guard
+  re-arms after each save.
+- No config or stub API changes; pure engine (`dist/`) upgrade. Re-copy the
+  edit stub only if you want the toast-based save feedback.
+
 ## 0.3.0 — 2026-06-12
 
 Live preview, theming, and directory-scale admin (8k-row feedback, round 2).

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import DocForm from '$lib/admin/DocForm.svelte';
 	import { displayValue } from '$lib/admin/client';
+	import { pushToast } from '$lib/admin/toasts.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -63,10 +64,11 @@
 
 	// Custom document actions (collection.admin.actions): POST {collection,id}
 	// to a consumer endpoint — the hook bus surfaced in the UI.
-	let actionState = $state<Record<string, string>>({});
+	let runningAction = $state<string | null>(null);
 	async function runAction(action: { label: string; url: string; confirm?: string }) {
 		if (action.confirm && !confirm(action.confirm)) return;
-		actionState[action.label] = '…';
+		if (runningAction) return;
+		runningAction = action.label;
 		try {
 			const res = await fetch(action.url, {
 				method: 'POST',
@@ -74,25 +76,38 @@
 				body: JSON.stringify({ collection: data.collection.slug, id: data.doc.id })
 			});
 			const body = (await res.json().catch(() => ({}))) as { message?: string };
-			actionState[action.label] = res.ok ? (body.message ?? 'Done') : (body.message ?? `Failed (${res.status})`);
-			if (res.ok) setTimeout(() => location.reload(), 600);
+			if (res.ok) {
+				pushToast(body.message ?? `${action.label} done`, 'success');
+				await invalidateAll();
+				if (iframeEl) iframeEl.src = iframeEl.src;
+			} else {
+				pushToast(body.message ?? `${action.label} failed (${res.status})`, 'error');
+			}
 		} catch {
-			actionState[action.label] = 'Failed';
+			pushToast(`${action.label} failed`, 'error');
+		} finally {
+			runningAction = null;
 		}
 	}
-	const savedMessage = $derived(
-		form?.published
-			? 'Published.'
-			: form?.draft
-				? 'Draft saved — the published version is unchanged.'
-				: form?.unpublished
-					? 'Unpublished — now hidden from published-only readers.'
-					: form?.restored
-						? 'Version restored.'
-						: form?.saved
-							? 'Saved.'
-							: ''
-	);
+	// Surface save results as a toast (fires once per form-action response).
+	let lastToastForm: unknown = null;
+	$effect(() => {
+		if (!form || form === lastToastForm) return;
+		lastToastForm = form;
+		const msg = form.published
+			? 'Published'
+			: form.draft
+				? 'Draft saved — published version unchanged'
+				: form.unpublished
+					? 'Unpublished'
+					: form.restored
+						? 'Version restored'
+						: form.saved
+							? 'Saved'
+							: '';
+		if (msg) pushToast(msg, 'success');
+		else if (form.message) pushToast(form.message, 'error');
+	});
 </script>
 
 <div class="mb-6 flex items-start justify-between gap-4">
@@ -145,10 +160,16 @@
 		{#each data.collection.actions as action (action.label)}
 			<button
 				type="button"
-				class="rounded-(--radius) border border-(--color-primary) px-3 py-1.5 text-sm text-(--color-primary) hover:bg-(--color-primary) hover:text-(--color-primary-fg)"
+				disabled={runningAction !== null}
+				class="inline-flex items-center gap-1.5 rounded-(--radius) border border-(--color-primary) px-3 py-1.5 text-sm text-(--color-primary) hover:bg-(--color-primary) hover:text-(--color-primary-fg) disabled:opacity-50"
 				onclick={() => runAction(action)}
 			>
-				{actionState[action.label] ?? action.label}
+				{#if runningAction === action.label}
+					<span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+					Working…
+				{:else}
+					{action.label}
+				{/if}
 			</button>
 		{/each}
 		{#if data.collection.drafts && data.liveStatus === 'published'}
@@ -181,11 +202,6 @@
 	</div>
 {/if}
 
-{#if savedMessage}
-	<div class="mb-4 max-w-2xl rounded-(--radius) border border-(--color-success) bg-(--color-elevate) px-4 py-2 text-sm text-(--color-success)">
-		{savedMessage}
-	</div>
-{/if}
 
 <div class="flex flex-wrap gap-10">
 	<div bind:this={formWrap} oninput={pushPreview} class="min-w-0 flex-1">

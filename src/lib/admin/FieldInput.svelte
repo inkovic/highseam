@@ -1,9 +1,12 @@
 <script lang="ts">
+	import RelationPicker from './RelationPicker.svelte';
 	import type { ClientField } from './client';
 
 	interface RelOption {
 		id: string;
 		title: string;
+		url?: string;
+		mimeType?: string;
 	}
 
 	let {
@@ -138,21 +141,15 @@
 			{/each}
 		</select>
 	{:else if field.type === 'relationship' || field.type === 'upload'}
-		<select
-			id={field.name}
+		<RelationPicker
 			name={field.name}
-			multiple={field.hasMany}
-			class={inputClass}
-			disabled={field.admin.readOnly}
-		>
-			{#if !field.required && !field.hasMany}
-				<option value="">—</option>
-			{/if}
-			{#each relOptions[field.relationTo ?? field.name] ?? [] as opt (opt.id)}
-				<option value={opt.id} selected={isSelected(value, opt.id)}>{opt.title}</option>
-			{/each}
-		</select>
-		<p class="text-xs text-(--color-muted)">→ {field.relationTo}</p>
+			options={relOptions[field.relationTo ?? field.name] ?? []}
+			{value}
+			hasMany={field.hasMany}
+			required={field.required}
+			relationTo={field.relationTo ?? ''}
+			readOnly={field.admin.readOnly}
+		/>
 	{:else if field.type === 'array' || field.type === 'json'}
 		<textarea
 			id={field.name}

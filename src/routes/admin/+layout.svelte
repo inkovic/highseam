@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import Toasts from '$lib/admin/Toasts.svelte';
 	import type { LayoutData } from './$types';
 	import type { Snippet } from 'svelte';
 
@@ -15,6 +16,7 @@
 </svelte:head>
 
 <div data-sp-theme={data.theme} class="min-h-screen bg-(--color-bg) text-(--color-fg)">
+<Toasts />
 {#if data.user}
 	<div class="flex min-h-screen">
 		<aside class="flex w-60 shrink-0 flex-col border-r border-(--color-border) bg-(--color-elevate)">
