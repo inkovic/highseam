@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { beforeNavigate } from '$app/navigation';
 	import BlocksInput from './BlocksInput.svelte';
 	import FieldInput from './FieldInput.svelte';
 	import HtmlInput from './HtmlInput.svelte';
@@ -74,15 +75,70 @@
 	const inputClass =
 		'w-full rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-sm focus:border-(--color-primary) focus:outline-none';
 	const isEdit = $derived(Boolean(values.id));
+
+	// --- dirty tracking + guards ---
+	let dirty = $state(false);
+	let submitting = $state(false);
+	function markDirty() {
+		dirty = true;
+	}
+	// Warn on in-app navigation away with unsaved edits.
+	beforeNavigate((nav) => {
+		if (dirty && !submitting && nav.type !== 'leave') {
+			if (!confirm('You have unsaved changes. Leave without saving?')) nav.cancel();
+		}
+	});
+	// Warn on tab close / hard reload.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const handler = (e: BeforeUnloadEvent) => {
+			if (dirty && !submitting) {
+				e.preventDefault();
+				e.returnValue = '';
+			}
+		};
+		window.addEventListener('beforeunload', handler);
+		return () => window.removeEventListener('beforeunload', handler);
+	});
+	// Cmd/Ctrl-S submits the form.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onKey = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+				e.preventDefault();
+				formEl?.requestSubmit();
+			}
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	});
+	function onFormInput() {
+		markDirty();
+		scheduleAutosave();
+	}
+	// Clear dirty once a submit is under way (guard won't block the save nav).
+	function onSubmit() {
+		submitting = true;
+		dirty = false;
+	}
+	// Reset the submitting flag after an enhanced action that didn't navigate
+	// (e.g. Save returning { saved: true }), so later edits re-arm the guard.
+	const handleEnhance = () => {
+		return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
+			await update({ reset: false });
+			submitting = false;
+		};
+	};
 </script>
 
 <form
 	method="POST"
 	{action}
 	enctype={collection.upload ? 'multipart/form-data' : undefined}
-	use:enhance
+	use:enhance={handleEnhance}
 	bind:this={formEl}
-	oninput={scheduleAutosave}
+	oninput={onFormInput}
+	onsubmit={onSubmit}
 	class="flex flex-wrap gap-8 {sidebarFields.length === 0 ? 'max-w-2xl' : ''}"
 >
 	{#snippet fieldRow(field: (typeof collection.fields)[number])}
