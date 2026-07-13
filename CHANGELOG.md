@@ -4,6 +4,20 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.3.2 — 2026-06-13
+
+Packaging bugfix (thanks to a consumer report).
+
+- **Fix: case-insensitive self-import in the packaged `dist`.** The toast
+  runes module `toasts.svelte.ts` compiles to `toasts.svelte.js` and sits
+  beside the `Toasts.svelte` component. Importing it extensionless
+  (`./toasts.svelte`) case-insensitively resolves to `Toasts.svelte` itself on
+  macOS/Windows, breaking every consumer — it only surfaced in the built
+  package, since dev-mode resolution probes `.ts` before the ambiguous exact
+  match. Now imported as `./toasts.svelte.js` (and the edit-stub template
+  emits `svelte-payload/admin/toasts.svelte.js`). The template builder no
+  longer double-appends `.js` to specifiers that already carry it.
+
 ## 0.3.1 — 2026-06-13
 
 Editing-loop polish (no new systems — tightening the daily experience).
