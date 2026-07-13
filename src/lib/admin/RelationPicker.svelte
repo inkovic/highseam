@@ -1,11 +1,14 @@
 <script lang="ts">
 	/**
 	 * Searchable reference picker for relationship / upload fields (single or
-	 * hasMany). Replaces the raw <select multiple> — you filter by title and
-	 * click to add; selected items show as removable chips. Submits via hidden
-	 * inputs named after the field, so form actions see the same values as a
-	 * native select. Works for any target collection, including table-backed
-	 * (8k rows) since it filters the already-loaded option list client-side.
+	 * hasMany). Type to filter, click to add; selected items show as removable
+	 * chips. Submits via hidden inputs named after the field.
+	 *
+	 * Two data modes:
+	 *  - preloaded `options` (small targets): filtered client-side, instant.
+	 *  - `searchUrl` (large targets, e.g. 8k rows): debounced fetch of matches
+	 *    from /api/<collection>/options?q=…, and selected ids whose titles
+	 *    aren't preloaded are resolved via ?ids=… so chips still read nicely.
 	 */
 	import type { RelOption } from './server';
 
@@ -16,7 +19,10 @@
 		hasMany = false,
 		required = false,
 		relationTo = '',
-		readOnly = false
+		readOnly = false,
+		searchUrl = '',
+		submitHidden = true,
+		onChange = undefined
 	}: {
 		name: string;
 		options: RelOption[];
@@ -25,6 +31,12 @@
 		required?: boolean;
 		relationTo?: string;
 		readOnly?: boolean;
+		searchUrl?: string;
+		/** Render hidden <input>s for native form submission. */
+		submitHidden?: boolean;
+		/** Callback mode (e.g. inside the rich-text editor, which serializes
+		 *  to JSON): receives the selected id(s) on change. */
+		onChange?: (ids: string[]) => void;
 	} = $props();
 
 	function idOf(v: unknown): string {
@@ -40,26 +52,80 @@
 	let selectedIds = $state<string[]>(initial());
 	let query = $state('');
 	let open = $state(false);
+	// Titles discovered via search / id-resolution, merged over preloaded options.
+	let extra = $state<Map<string, RelOption>>(new Map());
+	let remoteMatches = $state<RelOption[]>([]);
+	let loading = $state(false);
 
-	const byId = $derived(new Map(options.map((o) => [o.id, o])));
+	const byId = $derived(
+		new Map<string, RelOption>([...options.map((o) => [o.id, o] as const), ...extra])
+	);
 	const selectedOptions = $derived(selectedIds.map((id) => byId.get(id) ?? { id, title: id }));
-	const matches = $derived(
+
+	const localMatches = $derived(
 		options
 			.filter((o) => !selectedIds.includes(o.id))
 			.filter((o) => o.title.toLowerCase().includes(query.toLowerCase()))
-			.slice(0, 50)
 	);
+	const matches = $derived(
+		(searchUrl && query
+			? remoteMatches.filter((o) => !selectedIds.includes(o.id))
+			: localMatches
+		).slice(0, 50)
+	);
+
+	// Resolve titles for any selected ids not present in preloaded options.
+	$effect(() => {
+		if (!searchUrl) return;
+		const missing = selectedIds.filter((id) => !byId.has(id));
+		if (missing.length === 0) return;
+		fetch(`${searchUrl}?ids=${encodeURIComponent(missing.join(','))}`)
+			.then((r) => (r.ok ? r.json() : { options: [] }))
+			.then((d: { options: RelOption[] }) => {
+				const m = new Map(extra);
+				for (const o of d.options) m.set(o.id, o);
+				extra = m;
+			})
+			.catch(() => {});
+	});
+
+	let searchTimer: ReturnType<typeof setTimeout> | undefined;
+	function onQuery() {
+		open = true;
+		if (!searchUrl) return;
+		clearTimeout(searchTimer);
+		const q = query;
+		if (!q) {
+			remoteMatches = [];
+			return;
+		}
+		loading = true;
+		searchTimer = setTimeout(async () => {
+			try {
+				const r = await fetch(`${searchUrl}?q=${encodeURIComponent(q)}`);
+				const d = (await r.json()) as { options: RelOption[] };
+				remoteMatches = d.options ?? [];
+			} catch {
+				remoteMatches = [];
+			} finally {
+				loading = false;
+			}
+		}, 250);
+	}
 
 	function add(id: string) {
 		if (readOnly) return;
 		if (hasMany) selectedIds = [...selectedIds, id];
 		else selectedIds = [id];
 		query = '';
+		remoteMatches = [];
 		open = hasMany;
+		onChange?.(selectedIds);
 	}
 	function remove(id: string) {
 		if (readOnly) return;
 		selectedIds = selectedIds.filter((x) => x !== id);
+		onChange?.(selectedIds);
 	}
 
 	const inputClass =
@@ -67,11 +133,12 @@
 </script>
 
 <div class="relative">
-	<!-- hidden inputs carry the submitted value(s) -->
-	{#if selectedIds.length === 0}
-		<input type="hidden" {name} value="" />
-	{:else}
-		{#each selectedIds as id (id)}<input type="hidden" {name} value={id} />{/each}
+	{#if submitHidden}
+		{#if selectedIds.length === 0}
+			<input type="hidden" {name} value="" />
+		{:else}
+			{#each selectedIds as id (id)}<input type="hidden" {name} value={id} />{/each}
+		{/if}
 	{/if}
 
 	{#if selectedOptions.length > 0}
@@ -98,10 +165,13 @@
 			bind:value={query}
 			onfocus={() => (open = true)}
 			onblur={() => setTimeout(() => (open = false), 150)}
-			oninput={() => (open = true)}
+			oninput={onQuery}
 		/>
-		{#if open && matches.length > 0}
+		{#if open && (matches.length > 0 || loading)}
 			<ul class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-(--radius) border border-(--color-border) bg-(--color-elevate) py-1 shadow-lg">
+				{#if loading}
+					<li class="px-3 py-1.5 text-xs text-(--color-muted)">Searching…</li>
+				{/if}
 				{#each matches as opt (opt.id)}
 					<li>
 						<button
@@ -117,7 +187,7 @@
 					</li>
 				{/each}
 			</ul>
-		{:else if open && query}
+		{:else if open && query && !loading}
 			<div class="absolute z-20 mt-1 w-full rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-xs text-(--color-muted)">
 				No matches
 			</div>

@@ -3,7 +3,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import DocForm from '$lib/admin/DocForm.svelte';
 	import { displayValue } from '$lib/admin/client';
-	import { pushToast } from '$lib/admin/toasts.svelte.js';
+	import { pushToast } from '$lib/admin/toast-store.svelte.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();

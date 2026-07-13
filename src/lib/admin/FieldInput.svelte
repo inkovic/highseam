@@ -149,6 +149,7 @@
 			required={field.required}
 			relationTo={field.relationTo ?? ''}
 			readOnly={field.admin.readOnly}
+			searchUrl={field.relationTo ? `/api/${field.relationTo}/options` : ''}
 		/>
 	{:else if field.type === 'array' || field.type === 'json'}
 		<textarea

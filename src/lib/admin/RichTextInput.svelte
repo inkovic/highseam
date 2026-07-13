@@ -8,6 +8,7 @@
 	 * server re-sanitizes all inline HTML.
 	 */
 	import { markdownToNodes, type RichTextNode } from '$lib/core/richtext';
+	import RelationPicker from './RelationPicker.svelte';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
 
@@ -137,9 +138,6 @@
 	function optionsFor(slug: string): RelOption[] {
 		return relOptions[slug] ?? [];
 	}
-	function previewUrl(relationTo: string, id: string): RelOption | undefined {
-		return optionsFor(relationTo).find((o) => o.id === id);
-	}
 </script>
 
 <div class="space-y-1.5">
@@ -230,30 +228,34 @@
 					{:else if node.type === 'divider'}
 						<div class="px-3 py-3"><hr class="border-(--color-border)" /></div>
 					{:else if node.type === 'upload'}
-						<div class="flex items-center gap-3 bg-(--color-elevate-2)/50 px-3 py-2">
-							<span class="text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Image</span>
-							<select class="{miniInput} max-w-xs" bind:value={node.value}>
-								<option value="">— choose from {node.relationTo} —</option>
-								{#each optionsFor(node.relationTo) as opt (opt.id)}
-									<option value={opt.id}>{opt.title}</option>
-								{/each}
-							</select>
-							{#if node.value}
-								{@const sel = previewUrl(node.relationTo, node.value)}
-								{#if sel?.url && sel.mimeType?.startsWith('image/')}
-									<img src={sel.url} alt={sel.title} class="h-12 rounded border border-(--color-border)" />
-								{/if}
-							{/if}
+						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
+							<span class="mb-1 block text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Image</span>
+							<div class="max-w-sm">
+								<RelationPicker
+									name="_rt_upload"
+									options={optionsFor(node.relationTo)}
+									value={node.value}
+									relationTo={node.relationTo}
+									searchUrl="/api/{node.relationTo}/options"
+									submitHidden={false}
+									onChange={(ids) => (node.value = ids[0] ?? '')}
+								/>
+							</div>
 						</div>
 					{:else if node.type === 'relationship'}
-						<div class="flex items-center gap-3 bg-(--color-elevate-2)/50 px-3 py-2">
-							<span class="text-xs font-semibold tracking-wide text-(--color-primary) uppercase">↪ {node.relationTo}</span>
-							<select class="{miniInput} max-w-xs" bind:value={node.value}>
-								<option value="">— choose —</option>
-								{#each optionsFor(node.relationTo) as opt (opt.id)}
-									<option value={opt.id}>{opt.title}</option>
-								{/each}
-							</select>
+						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
+							<span class="mb-1 block text-xs font-semibold tracking-wide text-(--color-primary) uppercase">↪ {node.relationTo}</span>
+							<div class="max-w-sm">
+								<RelationPicker
+									name="_rt_rel"
+									options={optionsFor(node.relationTo)}
+									value={node.value}
+									relationTo={node.relationTo}
+									searchUrl="/api/{node.relationTo}/options"
+									submitHidden={false}
+									onChange={(ids) => (node.value = ids[0] ?? '')}
+								/>
+							</div>
 						</div>
 					{:else if node.type === 'block'}
 						{@const block = blockFor(node.blockType)}
@@ -278,10 +280,16 @@
 											{:else if sub.type === 'number'}
 												<input id="{node._key}-{sub.name}" type="number" step="any" class={miniInput} bind:value={node.fields[sub.name] as number} />
 											{:else if sub.type === 'relationship' || sub.type === 'upload'}
-												<select id="{node._key}-{sub.name}" class={miniInput} bind:value={node.fields[sub.name] as string}>
-													<option value="">—</option>
-													{#each optionsFor(sub.relationTo ?? '') as opt (opt.id)}<option value={opt.id}>{opt.title}</option>{/each}
-												</select>
+												<RelationPicker
+													name="_rt_sub"
+													options={optionsFor(sub.relationTo ?? '')}
+													value={node.fields[sub.name]}
+													hasMany={sub.hasMany}
+													relationTo={sub.relationTo ?? ''}
+													searchUrl={sub.relationTo ? `/api/${sub.relationTo}/options` : ''}
+													submitHidden={false}
+													onChange={(ids) => (node.fields[sub.name] = sub.hasMany ? ids : (ids[0] ?? ''))}
+												/>
 											{:else}
 												<input id="{node._key}-{sub.name}" type="text" class={miniInput} bind:value={node.fields[sub.name] as string} />
 											{/if}

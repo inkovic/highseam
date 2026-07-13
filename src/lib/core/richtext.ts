@@ -39,18 +39,43 @@ export const ALL_NODE_TYPES = [
 
 const ALLOWED_INLINE = ['strong', 'em', 'code', 'a', 's', 'u', 'br', 'b', 'i'];
 
+/** rel tokens preserved on <a> (the rest are dropped). */
+const ALLOWED_REL = new Set(['nofollow', 'noopener', 'noreferrer', 'sponsored', 'ugc']);
+
+const attr = (tag: string, name: string): string =>
+	(tag.match(new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i'))?.[2] ??
+		tag.match(new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i'))?.[3] ??
+		'').trim();
+
+/**
+ * Rebuild an <a> tag keeping a safe href, a whitelist of rel tokens
+ * (nofollow/noopener/noreferrer/sponsored/ugc), and target="_blank". SEO
+ * attributes written by content pipelines survive a sanitize pass; scripts
+ * and unsafe schemes do not.
+ */
+export function safeAnchorOpen(tag: string): string {
+	const href = attr(tag, 'href');
+	if (!href || /^\s*(javascript|data|vbscript):/i.test(href)) return '<a>';
+	const rel = new Set(
+		attr(tag, 'rel')
+			.toLowerCase()
+			.split(/\s+/)
+			.filter((t) => ALLOWED_REL.has(t))
+	);
+	const targetBlank = attr(tag, 'target').toLowerCase() === '_blank';
+	if (targetBlank) rel.add('noopener'); // safety pairing for target=_blank
+	const relAttr = rel.size ? ` rel="${[...rel].join(' ')}"` : '';
+	const targetAttr = targetBlank ? ' target="_blank"' : '';
+	return `<a href="${href.replace(/"/g, '&quot;')}"${relAttr}${targetAttr}>`;
+}
+
 export function sanitizeInlineHtml(html: string): string {
 	if (typeof html !== 'string') return '';
 	const allowed = ALLOWED_INLINE.join('|');
 	// Drop any tag not in the whitelist (keeps inner text).
 	let out = html.replace(new RegExp(`<(?!\\/?(?:${allowed})(?:[\\s/>]))[^>]*>`, 'gi'), '');
-	// <a>: keep only a safe href attribute.
-	out = out.replace(/<a\b[^>]*>/gi, (tag) => {
-		const m = tag.match(/href\s*=\s*("([^"]*)"|'([^']*)')/i);
-		const href = (m?.[2] ?? m?.[3] ?? '').trim();
-		if (!href || /^\s*javascript:/i.test(href)) return '<a>';
-		return `<a href="${href.replace(/"/g, '&quot;')}" rel="noopener">`;
-	});
+	// <a>: keep safe href + rel whitelist + target=_blank.
+	out = out.replace(/<a\b[^>]*>/gi, (tag) => safeAnchorOpen(tag));
 	// Strip attributes from all other allowed tags.
 	out = out.replace(
 		new RegExp(`<(${allowed.replace('a|', '').replace('|a', '')})\\b[^>]*>`, 'gi'),
@@ -107,13 +132,8 @@ export function sanitizeDocumentHtml(html: string): string {
 	const allowed = [...ALLOWED_BLOCK, ...ALLOWED_INLINE].join('|');
 	out = out.replace(new RegExp(`<(?!\\/?(?:${allowed})(?:[\\s/>]))[^>]*>`, 'gi'), '');
 
-	// <a href>: safe scheme only. <img src/alt>: http(s) or site-relative.
-	out = out.replace(/<a\b[^>]*>/gi, (tag) => {
-		const m = tag.match(/href\s*=\s*("([^"]*)"|'([^']*)')/i);
-		const href = (m?.[2] ?? m?.[3] ?? '').trim();
-		if (!href || /^\s*javascript:/i.test(href)) return '<a>';
-		return `<a href="${href.replace(/"/g, '&quot;')}" rel="noopener">`;
-	});
+	// <a>: safe href + rel whitelist + target=_blank. <img src/alt>: safe scheme.
+	out = out.replace(/<a\b[^>]*>/gi, (tag) => safeAnchorOpen(tag));
 	out = out.replace(/<img\b[^>]*>/gi, (tag) => {
 		const src = (tag.match(/src\s*=\s*("([^"]*)"|'([^']*)')/i)?.[2] ?? '').trim();
 		const alt = (tag.match(/alt\s*=\s*("([^"]*)"|'([^']*)')/i)?.[2] ?? '').trim();

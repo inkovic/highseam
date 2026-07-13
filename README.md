@@ -37,6 +37,16 @@ Everything is driven by your `src/cms.config.ts`.
   collection mapped to an existing remote table will report "table does not
   exist" until you seed it:
   `npx wrangler d1 execute <db-name> --local --file schema.sql`.
+- **Consumer Tailwind must scan the package.** The scaffolded
+  `svelte-payload.css` includes `@source "../node_modules/svelte-payload/dist"`
+  — Tailwind v4 doesn't scan `node_modules`, so without it the admin's
+  utilities (tabs, grids, picker) don't generate and the layout collapses. If
+  you scaffolded before 0.4.0, add that line.
+- **Don't name your app `svelte-payload`** — npm/pnpm refuse a dependency whose
+  name matches the host package.
+- **Bump the tarball filename each release** (`svelte-payload-0.4.0.tgz`, …).
+  In-place `file:` tarball swaps under the same name trip pnpm's lockfile
+  integrity check.
 - Engine updates arrive via `npm i <new tarball>`; scaffolded stubs are
   yours and don't auto-update (see CHANGELOG for stub-affecting releases).
 
