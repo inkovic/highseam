@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { toasts, dismissToast } from './toasts.svelte';
+	// Explicit .js: extensionless './toasts.svelte' self-resolves to this file's
+	// sibling component `Toasts.svelte` on case-insensitive filesystems in the
+	// packaged dist. The .js disambiguates to the compiled runes module.
+	import { toasts, dismissToast } from './toasts.svelte.js';
 	const items = $derived(toasts());
 </script>
 

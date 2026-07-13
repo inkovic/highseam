@@ -18,8 +18,14 @@ function rewrite(source) {
 	return source
 		.replace(/from '\$lib\/core'/g, "from 'svelte-payload'")
 		.replace(/from '\$lib\/server'/g, "from 'svelte-payload/server/index.js'")
+		// Bare .svelte component imports keep their extension.
 		.replace(/from '\$lib\/(.+?\.svelte)'/g, "from 'svelte-payload/$1'")
-		.replace(/from '\$lib\/(.+?)'/g, "from 'svelte-payload/$1.js'");
+		// Everything else resolves to the compiled .js — but don't double-append
+		// when the specifier already carries a .js (e.g. runes modules imported
+		// as `foo.svelte.js`).
+		.replace(/from '\$lib\/(.+?)'/g, (_m, p) =>
+			`from 'svelte-payload/${p}${p.endsWith('.js') ? '' : '.js'}'`
+		);
 }
 
 function copyTree(srcDir, destDir) {
