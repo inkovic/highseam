@@ -127,7 +127,19 @@ export {};
 `
 );
 
-// Admin theme tokens (Tailwind v4).
-cpSync(join(root, 'src/app.css'), join(out, 'svelte-payload.css'));
+// Admin theme tokens (Tailwind v4). Prepend an @source so the CONSUMER's
+// Tailwind build scans the packaged admin components — otherwise utilities
+// used only inside dist/ (tab strips, grids, the relation picker) never get
+// generated and the admin layout collapses. Path is relative to where the
+// stub lands (src/svelte-payload.css → ../node_modules/...).
+const themeCss = readFileSync(join(root, 'src/app.css'), 'utf-8');
+const sourceDirective =
+	`\n/* Scan svelte-payload's shipped admin components for Tailwind classes\n` +
+	`   (Tailwind v4 does not scan node_modules by default). */\n` +
+	`@source "../node_modules/svelte-payload/dist";\n`;
+writeFileSync(
+	join(out, 'svelte-payload.css'),
+	themeCss.replace(/(@import\s+["']tailwindcss["'];)/, `$1${sourceDirective}`)
+);
 
 console.log('templates/ built');

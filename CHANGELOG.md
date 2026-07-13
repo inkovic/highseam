@@ -4,6 +4,33 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.4.0 — 2026-06-13
+
+Consumer-migration hardening (from a real 8.4k-row adoption).
+
+- **Fix: consumer Tailwind now scans the shipped admin.** The `svelte-payload.css`
+  stub carries `@source "../node_modules/svelte-payload/dist"` — without it,
+  utilities used only inside packaged components (tab strips, grids, the
+  relation picker) never generate and the admin layout collapses. Add this
+  line if you're upgrading an app scaffolded before 0.4.0.
+- **Fix: SEO attributes survive an `html`-field save.** The sanitizer now
+  keeps a `rel` whitelist (nofollow / noopener / noreferrer / sponsored / ugc)
+  and `target="_blank"` (force-adding noopener), instead of collapsing every
+  link to `rel="noopener"`. Applies to both `html` fields and rich-text inline
+  links. `javascript:`/`data:` hrefs are still dropped.
+- **Async relationship search** — new `/api/<collection>/options?q=&ids=`
+  endpoint (access-checked); the picker debounce-fetches matches instead of
+  requiring every row preloaded, so relationships/uploads to large
+  (table-backed, 8k-row) collections scale. The searchable picker now also
+  drives rich-text upload/relationship embeds and block sub-fields (previously
+  plain `<select>`s over preloaded options).
+- **Toast store renamed** `toasts.svelte.ts` → `toast-store.svelte.ts` to
+  remove the case-insensitive twin of `Toasts.svelte` entirely (belt-and-
+  suspenders over the 0.3.2 `.js` fix).
+- Stub changes: `svelte-payload.css` (the `@source`), plus the picker/embeds
+  ride the packaged `dist` (no stub edit needed). Re-copy `svelte-payload.css`
+  from `templates/` on upgrade.
+
 ## 0.3.2 — 2026-06-13
 
 Packaging bugfix (thanks to a consumer report).
