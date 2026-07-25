@@ -7,12 +7,15 @@
 	 * inside the document flow. Serializes to JSON in a hidden input; the
 	 * server re-sanitizes all inline HTML.
 	 */
-	import { htmlToNodes, markdownToNodes, type RichTextNode } from '$lib/core/richtext';
+	import { tick } from 'svelte';
+	import { htmlToNodes, markdownToNodes, pruneEmptyInline, type RichTextNode } from '$lib/core/richtext';
 	import RelationPicker from './RelationPicker.svelte';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
 
 	type EditorNode = RichTextNode & { _key: string };
+	type TextNodeType = 'p' | 'h2' | 'h3' | 'quote';
+	const TEXT_TYPES: TextNodeType[] = ['p', 'h2', 'h3', 'quote'];
 
 	let {
 		field,
@@ -45,10 +48,11 @@
 
 	// --- structural ops --------------------------------------------------------
 
-	function addNode(node: RichTextNode, after?: number) {
+	function addNode(node: RichTextNode, after?: number): string {
 		const withKey = { ...node, _key: key() } as EditorNode;
-		if (after === undefined) nodes.push(withKey);
+		if (after === undefined || after < 0 || after >= nodes.length) nodes.push(withKey);
 		else nodes.splice(after + 1, 0, withKey);
+		return withKey._key;
 	}
 	function remove(i: number) {
 		nodes.splice(i, 1);
@@ -58,19 +62,257 @@
 		if (j < 0 || j >= nodes.length) return;
 		[nodes[i], nodes[j]] = [nodes[j], nodes[i]];
 	}
-	function setType(i: number, type: 'p' | 'h2' | 'h3' | 'quote') {
+	function setType(i: number, type: TextNodeType) {
 		const n = nodes[i];
 		if ('html' in n) nodes[i] = { ...n, type } as EditorNode;
+	}
+
+	// --- caret / element plumbing -----------------------------------------------
+	// Live contenteditable elements by node key, so structural ops can read the
+	// DOM (the source of truth while a node is focused) and restore the caret.
+
+	const els = new Map<string, HTMLElement>();
+	let focusedIndex = $state<number | null>(null);
+
+	function isEmptyHtml(html: string): boolean {
+		return !html.replace(/<br\s*\/?>|&nbsp;|<[^>]+>|\s/gi, '');
+	}
+	function fragHtml(frag: DocumentFragment): string {
+		const d = document.createElement('div');
+		d.appendChild(frag);
+		return pruneEmptyInline(d.innerHTML);
+	}
+	/** Prune the live element after an extract, keeping DOM and state in sync. */
+	function pruneEl(el: HTMLElement): string {
+		const cleaned = pruneEmptyInline(el.innerHTML);
+		if (cleaned !== el.innerHTML) el.innerHTML = cleaned;
+		return cleaned;
+	}
+	/** Place the caret in a node: at the start, the end, or a childNodes index. */
+	async function focusNode(k: string, where: 'start' | 'end' | number = 'start') {
+		await tick();
+		const el = els.get(k);
+		if (!el) return;
+		el.focus();
+		const r = document.createRange();
+		if (where === 'end') {
+			r.selectNodeContents(el);
+			r.collapse(false);
+		} else {
+			r.setStart(el, where === 'start' ? 0 : Math.min(where, el.childNodes.length));
+			r.collapse(true);
+		}
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(r);
+	}
+
+	// --- 3.1 split on Enter ------------------------------------------------------
+	// extractContents() mutates the live DOM: the tail leaves, so the element is
+	// already the correct head. No re-key, no remount, no focus loss on the head.
+
+	function splitAtCaret(el: HTMLElement, i: number) {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+		const caret = sel.getRangeAt(0);
+		if (!caret.collapsed) caret.deleteContents();
+
+		const tailRange = document.createRange();
+		tailRange.setStart(caret.startContainer, caret.startOffset);
+		tailRange.setEnd(el, el.childNodes.length);
+		const tailHtml = fragHtml(tailRange.extractContents());
+
+		const cur = nodes[i];
+		if ('html' in cur) cur.html = pruneEl(el);
+		// Splitting a heading yields a paragraph — you're starting body copy.
+		const newKey = addNode({ type: 'p', html: tailHtml }, i);
+		focusNode(newKey, 'start');
+	}
+
+	// --- 3.2 merge on Backspace at node start ------------------------------------
+
+	function caretAtStart(el: HTMLElement): boolean {
+		const sel = window.getSelection();
+		if (!sel || !sel.isCollapsed || sel.rangeCount === 0) return false;
+		const r = sel.getRangeAt(0).cloneRange();
+		r.setStart(el, 0);
+		return r.toString().length === 0;
+	}
+
+	/** Returns true if it handled the keypress. */
+	function mergeWithPrev(i: number): boolean {
+		if (i === 0) return false;
+		const cur = nodes[i];
+		const prev = nodes[i - 1];
+		if (!('html' in cur)) return false;
+
+		// Previous node is an embed (upload / relationship / block / divider):
+		// never concatenate text into it. Backspace on an empty node just
+		// removes that node; a non-empty one is left alone.
+		if (!('html' in prev)) {
+			if (isEmptyHtml(cur.html)) {
+				nodes.splice(i, 1);
+				return true;
+			}
+			return false;
+		}
+
+		const prevEl = els.get(prev._key);
+		if (prevEl) {
+			const joinAt = prevEl.childNodes.length;
+			if (cur.html) prevEl.insertAdjacentHTML('beforeend', cur.html);
+			prev.html = prevEl.innerHTML; // DOM already updated → stays in sync
+			nodes.splice(i, 1);
+			focusNode(prev._key, joinAt);
+		} else {
+			prev.html = prev.html + cur.html;
+			nodes.splice(i, 1);
+		}
+		return true;
+	}
+
+	// --- 3.3 selection-aware retype ----------------------------------------------
+	// Toolbar buttons preventDefault on mousedown, so the text selection survives
+	// the click — that's what makes "select a sentence → H2" work.
+
+	function nodeElFromSelection(): { i: number; el: HTMLElement } | null {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return null;
+		let n: Node | null = sel.getRangeAt(0).startContainer;
+		while (n) {
+			if (n instanceof HTMLElement && n.dataset.spNode) {
+				const nodeKey = n.dataset.spNode;
+				const i = nodes.findIndex((x) => x._key === nodeKey);
+				return i >= 0 ? { i, el: n } : null;
+			}
+			n = n.parentNode;
+		}
+		return null;
+	}
+
+	function applyType(type: TextNodeType) {
+		const found = nodeElFromSelection();
+		if (!found) {
+			if (focusedIndex !== null && 'html' in (nodes[focusedIndex] ?? {})) setType(focusedIndex, type);
+			return;
+		}
+		const { i, el } = found;
+		const sel = window.getSelection()!;
+		const range = sel.getRangeAt(0);
+
+		// Collapsed (or selection spans the whole node): retype the node.
+		if (range.collapsed) {
+			setType(i, type);
+			return;
+		}
+
+		// Sub-range: split into before / selected / after; the middle gets the
+		// new type, empty parts are dropped.
+		const afterRange = document.createRange();
+		afterRange.setStart(range.endContainer, range.endOffset);
+		afterRange.setEnd(el, el.childNodes.length);
+		const afterHtml = fragHtml(afterRange.extractContents());
+
+		const midRange = document.createRange();
+		midRange.setStart(range.startContainer, range.startOffset);
+		midRange.setEnd(el, el.childNodes.length);
+		const midHtml = fragHtml(midRange.extractContents());
+
+		const beforeHtml = pruneEl(el); // what's left in the live element
+		const orig = nodes[i];
+		if (!('html' in orig)) return;
+		const origType = orig.type as TextNodeType;
+
+		if (isEmptyHtml(midHtml)) return; // nothing meaningful selected
+
+		orig.html = beforeHtml;
+		const midKey = addNode({ type, html: midHtml }, i);
+		if (!isEmptyHtml(afterHtml)) addNode({ type: origType, html: afterHtml }, i + 1);
+		if (isEmptyHtml(beforeHtml)) nodes.splice(i, 1);
+		focusNode(midKey, 'end');
+	}
+
+	// --- 3.5 markdown input rules ------------------------------------------------
+	// Only fire when the marker is all that's been typed, so they can never eat
+	// existing content mid-edit.
+
+	function maybeInputRule(el: HTMLElement, i: number): boolean {
+		const node = nodes[i];
+		if (!('html' in node) || node.type !== 'p') return false;
+		const text = (el.textContent ?? '').replace(/ /g, ' ');
+		const heading: Record<string, TextNodeType> = { '## ': 'h2', '### ': 'h3', '> ': 'quote' };
+		if (heading[text]) {
+			el.innerHTML = '';
+			nodes[i] = { ...node, type: heading[text], html: '' } as EditorNode;
+			return true;
+		}
+		if (text === '- ' || text === '* ' || text === '1. ') {
+			const listType = text === '1. ' ? 'ol' : 'ul';
+			const newKey = key();
+			nodes[i] = { type: listType, items: [''], _key: newKey } as EditorNode;
+			focusNode(`${newKey}:0`, 'start');
+			return true;
+		}
+		if (text === '---') {
+			el.innerHTML = '';
+			nodes[i] = { type: 'divider', _key: key() } as EditorNode;
+			const newKey = addNode({ type: 'p', html: '' }, i);
+			focusNode(newKey, 'start');
+			return true;
+		}
+		return false;
+	}
+
+	function onTextInput(e: Event & { currentTarget: HTMLElement }, i: number) {
+		const el = e.currentTarget;
+		const node = nodes[i];
+		if ('html' in node) node.html = el.innerHTML;
+		maybeInputRule(el, i);
+	}
+
+	// --- keyboard: Enter/Backspace + type shortcuts + plain-text paste -----------
+
+	let plainPasteNext = false;
+
+	function onTextKeydown(e: KeyboardEvent & { currentTarget: HTMLElement }, i: number) {
+		const el = e.currentTarget;
+		const mod = e.metaKey || e.ctrlKey;
+
+		if (mod && e.altKey && ['1', '2', '3'].includes(e.key)) {
+			e.preventDefault();
+			setType(i, e.key === '1' ? 'p' : e.key === '2' ? 'h2' : 'h3');
+			return;
+		}
+		if (mod && e.shiftKey && e.key.toLowerCase() === 'v') {
+			plainPasteNext = true; // consumed by the next paste event
+			return;
+		}
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			splitAtCaret(el, i);
+			return;
+		}
+		if (e.key === 'Backspace' && caretAtStart(el)) {
+			if (mergeWithPrev(i)) e.preventDefault();
+		}
 	}
 
 	// --- paste: clipboard HTML / raw markup / multi-paragraph text -> nodes ----
 
 	const BLOCKY_HTML = /<(p|h[1-6]|blockquote|ul|ol|li|pre|hr|div|table)\b/i;
 
-	function clipboardToNodes(e: ClipboardEvent): RichTextNode[] | null {
-		const html = e.clipboardData?.getData('text/html') ?? '';
+	function clipboardToNodes(e: ClipboardEvent, plainOnly = false): RichTextNode[] | null {
+		const html = plainOnly ? '' : (e.clipboardData?.getData('text/html') ?? '');
 		const text = (e.clipboardData?.getData('text/plain') ?? '').trim();
 		if (html && BLOCKY_HTML.test(html)) return htmlToNodes(html);
+		if (plainOnly && text) {
+			// Cmd/Ctrl+Shift+V: discard source markup entirely.
+			const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			return text
+				.split(/\n{2,}/)
+				.map((b) => ({ type: 'p', html: esc(b.trim()).replace(/\n/g, '<br>') }) as RichTextNode)
+				.filter((n) => 'html' in n && n.html);
+		}
 		// Raw markup pasted as plain text (e.g. copied out of an HTML field).
 		if (text.startsWith('<') && BLOCKY_HTML.test(text)) return htmlToNodes(text);
 		// Plain text with blank-line paragraph breaks.
@@ -85,7 +327,9 @@
 	}
 
 	function onPaste(e: ClipboardEvent, i: number) {
-		const parsed = clipboardToNodes(e);
+		const plainOnly = plainPasteNext;
+		plainPasteNext = false;
+		const parsed = clipboardToNodes(e, plainOnly);
 		if (!parsed || parsed.length === 0) return;
 		e.preventDefault();
 		const withKeys = parsed.map((n) => ({ ...n, _key: key() }) as EditorNode);
@@ -139,8 +383,21 @@
 	// Set innerHTML exactly once (mount); reads flow DOM -> state on input, so
 	// the caret never jumps. Keyed {#each} keeps DOM nodes across reorders.
 
-	function editable(el: HTMLElement, html: string) {
-		el.innerHTML = html;
+	/**
+	 * One-shot: paint innerHTML at mount and register the element so structural
+	 * ops can read/repair the DOM. It deliberately does NOT react to later
+	 * html changes — the DOM is the source of truth while a node is focused.
+	 * Operations that change html programmatically either update the element
+	 * directly (merge) or give the node a fresh _key to force a remount.
+	 */
+	function editable(el: HTMLElement, param: { html: string; key: string }) {
+		el.innerHTML = param.html;
+		els.set(param.key, el);
+		return {
+			destroy() {
+				if (els.get(param.key) === el) els.delete(param.key);
+			}
+		};
 	}
 
 	function exec(cmd: string, arg?: string) {
@@ -188,12 +445,21 @@
 			<button type="button" class={toolBtn} title="Strikethrough" onmousedown={(e) => e.preventDefault()} onclick={() => exec('strikeThrough')}><s>S</s></button>
 			<button type="button" class={toolBtn} title="Inline code" onmousedown={(e) => e.preventDefault()} onclick={inlineCode}>{'</>'}</button>
 			<button type="button" class={toolBtn} title="Link" onmousedown={(e) => e.preventDefault()} onclick={addLink}>🔗</button>
+			<span class="mx-1 h-4 w-px bg-(--color-border)"></span>
+			<!-- Block type: applies to the selection (splitting the node if it's a
+			     sub-range) or to the focused node. mousedown-preventDefault keeps
+			     the text selection alive across the click. -->
+			<button type="button" class={toolBtn} title="Paragraph (⌘⌥1)" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('p')}>Text</button>
+			<button type="button" class="{toolBtn} font-semibold" title="Heading 2 (⌘⌥2)" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('h2')}>H2</button>
+			<button type="button" class="{toolBtn} font-semibold" title="Heading 3 (⌘⌥3)" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('h3')}>H3</button>
+			<button type="button" class={toolBtn} title="Quote" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('quote')}>❝</button>
 			<span class="ml-auto text-[10px] text-(--color-muted)">{nodes.length} nodes</span>
 		</div>
 
 		<div class="divide-y divide-(--color-border)">
 			{#each nodes as node, i (node._key)}
-				<div class="group/node relative">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="group/node relative" onfocusin={() => (focusedIndex = i)}>
 					<!-- node controls -->
 					<div class="absolute top-1 right-1 z-10 flex items-center gap-0.5 rounded bg-(--color-elevate) opacity-0 transition-opacity group-hover/node:opacity-100">
 						{#if 'html' in node}
@@ -219,8 +485,10 @@
 							role="textbox"
 							aria-multiline="true"
 							tabindex="0"
-							use:editable={node.html}
-							oninput={(e) => (node.html = e.currentTarget.innerHTML)}
+							data-sp-node={node._key}
+							use:editable={{ html: node.html, key: node._key }}
+							oninput={(e) => onTextInput(e, i)}
+							onkeydown={(e) => onTextKeydown(e, i)}
 							onpaste={(e) => onPaste(e, i)}
 							class="{ceClass} {node.type === 'h2'
 								? 'text-xl font-semibold'
@@ -240,7 +508,7 @@
 										contenteditable="true"
 										role="textbox"
 										tabindex="0"
-										use:editable={item}
+										use:editable={{ html: item, key: `${node._key}:${j}` }}
 										oninput={(e) => (node.items[j] = e.currentTarget.innerHTML)}
 										onpaste={(e) => onPaste(e, i)}
 										class="min-h-[1.4rem] flex-1 py-1 text-sm text-(--color-fg) focus:outline-none"
@@ -344,7 +612,7 @@
 				<button
 					type="button"
 					class="rounded border border-(--color-border) px-2 py-0.5 text-xs text-(--color-muted) hover:border-(--color-primary) hover:text-(--color-primary)"
-					onclick={() => addNode(item.make())}
+					onclick={() => addNode(item.make(), focusedIndex ?? undefined)}
 				>
 					{item.label}
 				</button>

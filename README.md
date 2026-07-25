@@ -329,7 +329,15 @@ document flow:
 The admin renders a block editor: contenteditable text blocks with a
 formatting toolbar, plus add/reorder/delete for lists, quotes, code, dividers,
 images, embeds, and your components — each component edits its own typed
-fields inline. `$lib/RichTextRenderer.svelte` renders it on the frontend
+fields inline.
+
+Built for the paste-then-reformat loop. Paste a document (Word, Docs, HTML, an
+AI draft) and it lands as one node per block; then **Enter** splits a node at
+the caret, **Backspace** at a node's start merges it back, and selecting part
+of a paragraph and clicking **H2** promotes just that selection — splitting the
+node around it. Markdown prefixes (`## `, `> `, `- `, `1. `, `---`) convert an
+empty paragraph as you type, ⌘/Ctrl+⌥+1/2/3 set the focused node's type, and
+⌘/Ctrl+Shift+V pastes as plain text. `$lib/RichTextRenderer.svelte` renders it on the frontend
 (`/posts/<slug>` is a working example, with `extractRichTextRefs` resolving
 embedded documents server-side). Legacy markdown strings still work.
 

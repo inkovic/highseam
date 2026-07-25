@@ -280,6 +280,33 @@ export function markdownToNodes(md: string): RichTextNode[] {
 }
 
 
+/**
+ * Remove empty inline wrappers (browser-only).
+ *
+ * `Range.extractContents()` correctly closes and reopens inline tags when a
+ * cut lands inside them, but it leaves an empty shell on the far side of the
+ * boundary — splitting `<strong>Title</strong> body` right after `Title`
+ * yields `<strong></strong> body`. Harmless to render, but it accumulates
+ * with every split and pollutes the stored HTML, so prune it.
+ */
+export function pruneEmptyInline(html: string): string {
+	const container = document.createElement('div');
+	container.innerHTML = html;
+	const INLINE = new Set(['STRONG', 'EM', 'CODE', 'A', 'S', 'U', 'B', 'I']);
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (const node of Array.from(container.querySelectorAll('*'))) {
+			if (!INLINE.has(node.tagName)) continue;
+			if (node.querySelector('br, img')) continue; // carries content
+			if ((node.textContent ?? '') !== '') continue;
+			node.remove();
+			changed = true;
+		}
+	}
+	return container.innerHTML;
+}
+
 // ---------------------------------------------------------------------------
 // HTML -> nodes (editor-side paste & import; browser-only, uses DOMParser)
 // ---------------------------------------------------------------------------

@@ -4,6 +4,39 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.5.0 — 2026-07-25
+
+Post-paste reformatting in the rich text editor. 0.4.1 made paste produce
+correct nodes; this makes the resulting block structure editable, which is the
+other half of the paste-then-reformat loop.
+
+- **Split on Enter.** Enter in a text node splits it at the caret; the tail
+  becomes a new paragraph and the caret follows it. Shift+Enter still inserts
+  a `<br>`. Implemented with `Range.extractContents()`, so inline markup is
+  closed and reopened correctly rather than sliced mid-tag.
+- **Merge on Backspace at node start.** Joins into the previous text node with
+  the caret at the join point. Embeds (upload / relationship / block /
+  divider) are never concatenated into — backspace on an empty node removes
+  that node, and a non-empty one is left alone.
+- **Selection-aware block type.** New Text / H2 / H3 / ❝ toolbar buttons. With
+  a collapsed caret they retype the whole node (as before); with a sub-range
+  selected they split the node into before / selected / after and apply the
+  type to the middle. "Select `The rules.` → H2" now does the obvious thing
+  instead of promoting the entire paragraph.
+- **Empty-inline pruning.** `extractContents()` leaves an empty `<strong></strong>`
+  shell on the far side of a cut; new `pruneEmptyInline()` (exported from
+  core) strips those so they don't accumulate across splits.
+- **Markdown input rules** on an otherwise-empty paragraph: `## `, `### `,
+  `> `, `- `/`* `, `1. `, `---`. They only fire when the marker is all that's
+  been typed, so they can't eat existing content.
+- **Keyboard:** ⌘/Ctrl+⌥+1/2/3 → Text/H2/H3 on the focused node;
+  ⌘/Ctrl+Shift+V pastes as plain text, discarding source markup.
+- **Add buttons insert after the focused node** instead of always appending.
+- Tests: `npm run test:richtext` (jsdom) covers split inside `<strong>`,
+  across an `<a>` with attributes, at node start/end, the three-way selection
+  split, merge join points, and empty detection.
+- No config or stub API changes; pure engine upgrade.
+
 ## 0.4.0 — 2026-06-13
 
 Consumer-migration hardening (from a real 8.4k-row adoption).
