@@ -1,6 +1,6 @@
 {
 	"name": "svelte-payload",
-	"version": "0.4.1",
+	"version": "0.5.0",
 	"description": "Payload-inspired headless CMS for SvelteKit: config-driven collections, generated REST + GraphQL + admin panel, drafts, localization, uploads. Runs on Node and Cloudflare Workers.",
 	"license": "MIT",
 	"type": "module",
@@ -28,6 +28,7 @@
 		"preview": "wrangler pages dev .svelte-kit/cloudflare",
 		"deploy": "npm run build && wrangler pages deploy .svelte-kit/cloudflare",
 		"generate:types": "curl -s -X POST http://localhost:5173/api/generate-types",
+		"test:richtext": "node scripts/test-richtext-split.mjs",
 		"package": "svelte-kit sync && svelte-package -o dist && node scripts/build-templates.js",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -45,6 +46,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",
 		"@types/node": "^25.9.2",
+		"jsdom": "^28.0.1",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",
