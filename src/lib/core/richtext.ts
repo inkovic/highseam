@@ -278,3 +278,118 @@ export function markdownToNodes(md: string): RichTextNode[] {
 	}
 	return nodes;
 }
+
+
+// ---------------------------------------------------------------------------
+// HTML -> nodes (editor-side paste & import; browser-only, uses DOMParser)
+// ---------------------------------------------------------------------------
+
+const INLINE_TAGS = new Set(['SPAN', 'STRONG', 'EM', 'A', 'CODE', 'B', 'I', 'U', 'S', 'BR', 'SUB', 'SUP', 'SMALL', 'MARK']);
+
+/**
+ * Best-effort conversion of arbitrary HTML (a pasted page fragment, a raw
+ * rich_html string, a Word/Google-Docs clipboard payload) into typed nodes.
+ * Block structure maps to node types; inline HTML is run through
+ * sanitizeInlineHtml per block. Images/figures are skipped on purpose:
+ * uploads are first-class nodes the author places deliberately.
+ */
+export function htmlToNodes(html: string): RichTextNode[] {
+	if (typeof html !== 'string' || !html.trim() || typeof DOMParser === 'undefined') return [];
+	const doc = new DOMParser().parseFromString(html, 'text/html');
+
+	// Style-only emphasis (Google Docs / Word spans) -> real marks, so the
+	// inline sanitizer keeps them when it strips the spans themselves.
+	for (const span of Array.from(doc.querySelectorAll('span[style]'))) {
+		const style = (span.getAttribute('style') ?? '').toLowerCase();
+		const bold = /font-weight\s*:\s*(bold|[6-9]00)/.test(style);
+		const italic = /font-style\s*:\s*italic/.test(style);
+		if (!bold && !italic) continue;
+		let inner = span.innerHTML;
+		if (italic) inner = `<em>${inner}</em>`;
+		if (bold) inner = `<strong>${inner}</strong>`;
+		span.outerHTML = inner;
+	}
+
+	const nodes: RichTextNode[] = [];
+	const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+	const pushText = (type: 'p' | 'h2' | 'h3' | 'quote', raw: string) => {
+		const clean = sanitizeInlineHtml(raw).trim();
+		if (clean.replace(/<br\s*\/?>|&nbsp;/gi, '').trim()) nodes.push({ type, html: clean });
+	};
+	const listItems = (el: Element): string[] =>
+		Array.from(el.querySelectorAll(':scope > li'))
+			.map((li) => sanitizeInlineHtml(li.innerHTML).trim())
+			.filter(Boolean);
+
+	const walk = (root: ParentNode) => {
+		let run: string[] = [];
+		const flush = () => {
+			if (run.length) pushText('p', run.join(''));
+			run = [];
+		};
+		for (const child of Array.from(root.childNodes)) {
+			if (child.nodeType === 3) {
+				if ((child.textContent ?? '').trim()) run.push(esc(child.textContent ?? ''));
+				continue;
+			}
+			if (child.nodeType !== 1) continue;
+			const el = child as Element;
+			if (INLINE_TAGS.has(el.tagName)) {
+				run.push(el.tagName === 'BR' ? '<br>' : el.outerHTML);
+				continue;
+			}
+			flush();
+			switch (el.tagName) {
+				case 'P':
+					pushText('p', el.innerHTML);
+					break;
+				case 'H1':
+				case 'H2':
+					pushText('h2', el.innerHTML);
+					break;
+				case 'H3':
+				case 'H4':
+				case 'H5':
+				case 'H6':
+					pushText('h3', el.innerHTML);
+					break;
+				case 'BLOCKQUOTE': {
+					const ps = Array.from(el.querySelectorAll(':scope > p'));
+					pushText('quote', ps.length ? ps.map((p) => p.innerHTML).join('<br>') : el.innerHTML);
+					break;
+				}
+				case 'UL': {
+					const items = listItems(el);
+					if (items.length) nodes.push({ type: 'ul', items });
+					break;
+				}
+				case 'OL': {
+					const items = listItems(el);
+					if (items.length) nodes.push({ type: 'ol', items });
+					break;
+				}
+				case 'PRE': {
+					const code = (el.textContent ?? '').trim();
+					if (code) nodes.push({ type: 'code', code });
+					break;
+				}
+				case 'HR':
+					nodes.push({ type: 'divider' });
+					break;
+				case 'IMG':
+				case 'FIGURE':
+				case 'SCRIPT':
+				case 'STYLE':
+				case 'META':
+				case 'LINK':
+				case 'TITLE':
+					break;
+				default:
+					walk(el); // div/section/table/li wrappers: recurse
+			}
+		}
+		flush();
+	};
+	walk(doc.body);
+	return nodes;
+}

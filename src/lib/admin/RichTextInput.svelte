@@ -7,7 +7,7 @@
 	 * inside the document flow. Serializes to JSON in a hidden input; the
 	 * server re-sanitizes all inline HTML.
 	 */
-	import { markdownToNodes, type RichTextNode } from '$lib/core/richtext';
+	import { htmlToNodes, markdownToNodes, type RichTextNode } from '$lib/core/richtext';
 	import RelationPicker from './RelationPicker.svelte';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
@@ -61,6 +61,38 @@
 	function setType(i: number, type: 'p' | 'h2' | 'h3' | 'quote') {
 		const n = nodes[i];
 		if ('html' in n) nodes[i] = { ...n, type } as EditorNode;
+	}
+
+	// --- paste: clipboard HTML / raw markup / multi-paragraph text -> nodes ----
+
+	const BLOCKY_HTML = /<(p|h[1-6]|blockquote|ul|ol|li|pre|hr|div|table)\b/i;
+
+	function clipboardToNodes(e: ClipboardEvent): RichTextNode[] | null {
+		const html = e.clipboardData?.getData('text/html') ?? '';
+		const text = (e.clipboardData?.getData('text/plain') ?? '').trim();
+		if (html && BLOCKY_HTML.test(html)) return htmlToNodes(html);
+		// Raw markup pasted as plain text (e.g. copied out of an HTML field).
+		if (text.startsWith('<') && BLOCKY_HTML.test(text)) return htmlToNodes(text);
+		// Plain text with blank-line paragraph breaks.
+		if (/\n\s*\n/.test(text)) {
+			const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			return text
+				.split(/\n{2,}/)
+				.map((b) => ({ type: 'p', html: esc(b.trim()).replace(/\n/g, '<br>') }) as RichTextNode)
+				.filter((n) => 'html' in n && n.html);
+		}
+		return null; // simple inline paste: browser default, re-sanitized on save
+	}
+
+	function onPaste(e: ClipboardEvent, i: number) {
+		const parsed = clipboardToNodes(e);
+		if (!parsed || parsed.length === 0) return;
+		e.preventDefault();
+		const withKeys = parsed.map((n) => ({ ...n, _key: key() }) as EditorNode);
+		const cur = nodes[i];
+		const curEmpty = cur && 'html' in cur && !cur.html.replace(/<br\s*\/?>|&nbsp;|\s/gi, '');
+		if (curEmpty) nodes.splice(i, 1, ...withKeys);
+		else nodes.splice(i + 1, 0, ...withKeys);
 	}
 
 	// svelte-ignore state_referenced_locally — field config is static per instance
@@ -189,6 +221,7 @@
 							tabindex="0"
 							use:editable={node.html}
 							oninput={(e) => (node.html = e.currentTarget.innerHTML)}
+							onpaste={(e) => onPaste(e, i)}
 							class="{ceClass} {node.type === 'h2'
 								? 'text-xl font-semibold'
 								: node.type === 'h3'
@@ -209,6 +242,7 @@
 										tabindex="0"
 										use:editable={item}
 										oninput={(e) => (node.items[j] = e.currentTarget.innerHTML)}
+										onpaste={(e) => onPaste(e, i)}
 										class="min-h-[1.4rem] flex-1 py-1 text-sm text-(--color-fg) focus:outline-none"
 									></div>
 									<button type="button" class="{ctl} mt-1" onclick={() => node.items.splice(j, 1)}>✕</button>
