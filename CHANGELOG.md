@@ -4,6 +4,29 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.5.1 — 2026-08-04
+
+Media UX, and one consistency pull-back.
+
+- **Inline upload from the field.** Upload fields now take a file directly —
+  choose or drag-drop — creating the document and selecting it, instead of
+  making you leave for the media collection and come back. It POSTs multipart
+  to the collection's own create endpoint, so access control, mime/size limits
+  and hooks apply exactly as they do for a normal create. No bespoke upload
+  route. Works in plain fields, rich-text embeds, and block sub-fields.
+- **Media collections render as a gallery.** Collections with `upload: true`
+  get a thumbnail grid in the admin list instead of a table of filenames,
+  with select-to-bulk still available. Non-upload collections are unchanged.
+- **Pull-back: one picker everywhere.** `BlocksInput` was the last editor
+  still using a plain `<select>` for relationships (and had grown a bespoke
+  upload preview on top of it). It now uses `RelationPicker` like the other
+  two — deleting the special case and gaining search, async lookup, chips and
+  thumbnails for free.
+- **Actionable storage error.** "No file storage configured" now names the
+  missing R2 binding and the command to create the bucket, instead of being a
+  bare 500. The demo `wrangler.toml` ships the R2 binding uncommented —
+  `wrangler dev` simulates it locally with no remote bucket.
+
 ## 0.5.0 — 2026-07-25
 
 Post-paste reformatting in the rich text editor. 0.4.1 made paste produce

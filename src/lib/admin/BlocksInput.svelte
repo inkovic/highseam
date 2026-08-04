@@ -5,12 +5,10 @@
 	 * serialized to a single hidden input as JSON, so it submits like any
 	 * other field through form actions.
 	 */
+	import RelationPicker from './RelationPicker.svelte';
 	import type { ClientBlock, ClientField } from './client';
+	import type { RelOption } from './server';
 
-	interface RelOption {
-		id: string;
-		title: string;
-	}
 	type Row = Record<string, unknown>;
 
 	let {
@@ -131,18 +129,18 @@
 											<option value={opt.value}>{opt.label}</option>
 										{/each}
 									</select>
-								{:else if sub.type === 'relationship'}
-									<select
-										id="{field.name}-{i}-{sub.name}"
-										class={inputClass}
-										value={relId(rows[i][sub.name])}
-										onchange={(e) => (rows[i][sub.name] = e.currentTarget.value || null)}
-									>
-										{#if !sub.required}<option value="">—</option>{/if}
-										{#each relOptions[sub.relationTo ?? ''] ?? [] as opt (opt.id)}
-											<option value={opt.id}>{opt.title}</option>
-										{/each}
-									</select>
+								{:else if sub.type === 'relationship' || sub.type === 'upload'}
+									<RelationPicker
+										name="_blk_{sub.name}"
+										options={relOptions[sub.relationTo ?? ''] ?? []}
+										value={rows[i][sub.name]}
+										hasMany={sub.hasMany}
+										relationTo={sub.relationTo ?? ''}
+										searchUrl={sub.relationTo ? `/api/${sub.relationTo}/options` : ''}
+										uploadUrl={sub.type === 'upload' && sub.relationTo ? `/api/${sub.relationTo}` : ''}
+										submitHidden={false}
+										onChange={(ids) => (rows[i][sub.name] = sub.hasMany ? ids : (ids[0] ?? null))}
+									/>
 								{:else if sub.type === 'array' || sub.type === 'blocks' || sub.type === 'json'}
 									<textarea
 										id="{field.name}-{i}-{sub.name}"

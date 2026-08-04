@@ -10,7 +10,10 @@ binding = "DB"
 database_name = "svelte-payload-db"
 database_id = "f1add0ed-4e13-474f-909a-d92efe6d35d3"
 
-# --- R2 (media uploads, future) ----------------------------------------------
-# [[r2_buckets]]
-# binding = "BUCKET"
-# bucket_name = "svelte-payload-files"
+# --- R2 (media uploads) ------------------------------------------------------
+# Upload collections need this. `wrangler dev` simulates it locally with no
+# remote bucket; for deploys, create it first:
+#   npx wrangler r2 bucket create svelte-payload-files
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "svelte-payload-files"

@@ -21,6 +21,7 @@
 		relationTo = '',
 		readOnly = false,
 		searchUrl = '',
+		uploadUrl = '',
 		submitHidden = true,
 		onChange = undefined
 	}: {
@@ -32,6 +33,12 @@
 		relationTo?: string;
 		readOnly?: boolean;
 		searchUrl?: string;
+		/**
+		 * Upload collection endpoint (`/api/<slug>`). When set, the field
+		 * accepts a file directly — choose or drop — creating the document and
+		 * selecting it, instead of making you leave and use the collection.
+		 */
+		uploadUrl?: string;
 		/** Render hidden <input>s for native form submission. */
 		submitHidden?: boolean;
 		/** Callback mode (e.g. inside the rich-text editor, which serializes
@@ -113,6 +120,61 @@
 		}, 250);
 	}
 
+	// --- inline upload -----------------------------------------------------------
+	// Reuses the collection's own create endpoint: POST multipart {file} to
+	// /api/<slug>. No bespoke upload route, so access control, mime/size limits
+	// and hooks all apply exactly as they do for a normal create.
+
+	let uploading = $state(false);
+	let uploadError = $state('');
+	let dragOver = $state(false);
+
+	async function uploadFiles(files: FileList | File[]) {
+		if (!uploadUrl || readOnly) return;
+		const list = Array.from(files).slice(0, hasMany ? 20 : 1);
+		if (list.length === 0) return;
+		uploading = true;
+		uploadError = '';
+		try {
+			for (const file of list) {
+				const body = new FormData();
+				body.append('file', file);
+				const res = await fetch(uploadUrl, { method: 'POST', body });
+				const payload = (await res.json().catch(() => ({}))) as {
+					doc?: RelOption & { filename?: string };
+					message?: string;
+				};
+				if (!res.ok || !payload.doc) {
+					uploadError = payload.message ?? `Upload failed (${res.status})`;
+					break;
+				}
+				const doc = payload.doc;
+				const opt: RelOption = {
+					id: doc.id,
+					title: String(doc.title ?? doc.filename ?? doc.id),
+					url: doc.url,
+					mimeType: doc.mimeType
+				};
+				extra = new Map(extra).set(opt.id, opt);
+				selectedIds = hasMany ? [...selectedIds, opt.id] : [opt.id];
+			}
+			onChange?.(selectedIds);
+		} catch {
+			uploadError = 'Upload failed';
+		} finally {
+			uploading = false;
+		}
+	}
+
+	function onDrop(e: DragEvent) {
+		dragOver = false;
+		const files = e.dataTransfer?.files;
+		if (uploadUrl && files && files.length) {
+			e.preventDefault();
+			uploadFiles(files);
+		}
+	}
+
 	function add(id: string) {
 		if (readOnly) return;
 		if (hasMany) selectedIds = [...selectedIds, id];
@@ -191,6 +253,43 @@
 			<div class="absolute z-20 mt-1 w-full rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-xs text-(--color-muted)">
 				No matches
 			</div>
+		{/if}
+	{/if}
+
+	{#if uploadUrl && !readOnly}
+		<!-- Choose or drop a file right here; it becomes a document in the
+		     upload collection and is selected immediately. -->
+		<label
+			class="mt-1.5 flex cursor-pointer items-center justify-center gap-2 rounded-(--radius) border border-dashed px-3 py-2 text-xs transition-colors {dragOver
+				? 'border-(--color-primary) bg-(--color-primary)/10 text-(--color-primary)'
+				: 'border-(--color-border) text-(--color-muted) hover:border-(--color-primary) hover:text-(--color-primary)'}"
+			ondragover={(e) => {
+				e.preventDefault();
+				dragOver = true;
+			}}
+			ondragleave={() => (dragOver = false)}
+			ondrop={onDrop}
+		>
+			{#if uploading}
+				<span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+				Uploading…
+			{:else}
+				<span>⬆ Upload{hasMany ? ' files' : ' a file'} — or drop {hasMany ? 'them' : 'it'} here</span>
+			{/if}
+			<input
+				type="file"
+				class="hidden"
+				multiple={hasMany}
+				disabled={uploading}
+				onchange={(e) => {
+					const f = e.currentTarget.files;
+					if (f) uploadFiles(f);
+					e.currentTarget.value = '';
+				}}
+			/>
+		</label>
+		{#if uploadError}
+			<p class="mt-1 text-[11px] text-(--color-danger)">{uploadError}</p>
 		{/if}
 	{/if}
 

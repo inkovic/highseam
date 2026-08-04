@@ -539,6 +539,7 @@
 									value={node.value}
 									relationTo={node.relationTo}
 									searchUrl="/api/{node.relationTo}/options"
+									uploadUrl="/api/{node.relationTo}"
 									submitHidden={false}
 									onChange={(ids) => (node.value = ids[0] ?? '')}
 								/>
@@ -589,6 +590,7 @@
 													hasMany={sub.hasMany}
 													relationTo={sub.relationTo ?? ''}
 													searchUrl={sub.relationTo ? `/api/${sub.relationTo}/options` : ''}
+													uploadUrl={sub.type === 'upload' && sub.relationTo ? `/api/${sub.relationTo}` : ''}
 													submitHidden={false}
 													onChange={(ids) => (node.fields[sub.name] = sub.hasMany ? ids : (ids[0] ?? ''))}
 												/>
