@@ -150,6 +150,7 @@
 			relationTo={field.relationTo ?? ''}
 			readOnly={field.admin.readOnly}
 			searchUrl={field.relationTo ? `/api/${field.relationTo}/options` : ''}
+			uploadUrl={field.type === 'upload' && field.relationTo ? `/api/${field.relationTo}` : ''}
 		/>
 	{:else if field.type === 'array' || field.type === 'json'}
 		<textarea

@@ -123,6 +123,39 @@
 	</form>
 {/if}
 
+{#if data.collection.upload}
+	<!-- Media library: a grid of what the files actually are, not a text table. -->
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+		{#each data.result.docs as doc (doc.id)}
+			{@const isImage = String(doc.mimeType ?? '').startsWith('image/')}
+			<div class="group/card relative overflow-hidden rounded-xl border border-(--color-border) bg-(--color-elevate)">
+				<label class="absolute top-2 left-2 z-10 rounded bg-(--color-bg)/80 p-1 opacity-0 transition-opacity group-hover/card:opacity-100 {selected.has(String(doc.id)) ? 'opacity-100' : ''}">
+					<input type="checkbox" checked={selected.has(String(doc.id))} onchange={() => toggle(String(doc.id))} class="h-4 w-4 accent-(--color-primary)" />
+				</label>
+				<a href="/admin/{data.collection.slug}/{doc.id}" class="block">
+					<div class="flex aspect-square items-center justify-center bg-(--color-elevate-2)">
+						{#if isImage && doc.url}
+							<img src={String(doc.url)} alt={String(doc.alt ?? doc.filename ?? '')} class="h-full w-full object-cover" loading="lazy" />
+						{:else}
+							<span class="text-3xl text-(--color-muted)">📄</span>
+						{/if}
+					</div>
+					<div class="p-2">
+						<p class="truncate text-xs font-medium" title={String(doc.filename ?? '')}>{doc.filename ?? doc.id}</p>
+						<p class="mt-0.5 truncate text-[11px] text-(--color-muted)">
+							{String(doc.mimeType ?? '—')} · {Math.round(Number(doc.filesize ?? 0) / 1024)} KB
+						</p>
+					</div>
+				</a>
+			</div>
+		{:else}
+			<p class="col-span-full py-12 text-center text-(--color-muted)">
+				No files yet.
+				<a href="/admin/{data.collection.slug}/create" class="text-(--color-primary) hover:underline">Upload one</a>
+			</p>
+		{/each}
+	</div>
+{:else}
 <div class="overflow-x-auto rounded-xl border border-(--color-border)">
 	<table class="w-full text-left text-sm">
 		<thead class="bg-(--color-elevate) text-xs tracking-wide text-(--color-muted) uppercase">
@@ -172,6 +205,7 @@
 		</tbody>
 	</table>
 </div>
+{/if}
 
 {#if data.result.totalPages > 1}
 	<div class="mt-4 flex items-center gap-2 text-sm">

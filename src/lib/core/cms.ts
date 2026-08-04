@@ -466,7 +466,14 @@ export class CMS {
 	/** Store an uploaded file and return the managed file fields. */
 	private async storeFile(col: CollectionConfig, file: File): Promise<Record<string, unknown>> {
 		const cfg = this.uploadConfig(col)!;
-		if (!this.storage) throw new APIError('No file storage configured', 500);
+		if (!this.storage)
+			throw new APIError(
+				`Collection "${col.slug}" accepts uploads but no file storage is configured. ` +
+					`On Cloudflare, bind an R2 bucket as BUCKET in wrangler.toml ` +
+					`(create it with: npx wrangler r2 bucket create <name>). Local dev stores ` +
+					`files under .data/uploads automatically.`,
+				500
+			);
 
 		const max = cfg.maxFileSize ?? 10 * 1024 * 1024;
 		if (file.size > max) throw new APIError(`File too large (max ${max} bytes)`, 413);
