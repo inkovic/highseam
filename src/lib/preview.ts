@@ -1,5 +1,5 @@
 /**
- * svelte-payload/preview — the front-end (public site) side of Live Preview.
+ * highseam/preview — the front-end (public site) side of Live Preview.
  *
  * The CMS and public site are usually separate deploys sharing one database.
  * The admin opens `<your-url>?preview=<token>`; your site verifies the token
@@ -7,7 +7,7 @@
  * instead of the published row.
  *
  * Framework-agnostic: Web Crypto only (Node + Workers). Import the Svelte
- * <PreviewBanner> from 'svelte-payload/PreviewBanner.svelte'.
+ * <PreviewBanner> from 'highseam/PreviewBanner.svelte'.
  */
 import { verifyJWT } from './core/crypto.js';
 
@@ -51,12 +51,12 @@ export function onPreviewData<T = Record<string, unknown>>(
 	const handler = (event: MessageEvent) => {
 		if (options.origin && event.origin !== options.origin) return;
 		const data = event.data as { type?: string; doc?: T } | null;
-		if (data && data.type === 'svelte-payload:preview' && data.doc) callback(data.doc);
+		if (data && data.type === 'highseam:preview' && data.doc) callback(data.doc);
 	};
 	window.addEventListener('message', handler);
 	// Tell the parent we're ready to receive (admin starts sending on ack).
 	try {
-		window.parent?.postMessage({ type: 'svelte-payload:preview-ready' }, options.origin ?? '*');
+		window.parent?.postMessage({ type: 'highseam:preview-ready' }, options.origin ?? '*');
 	} catch {
 		/* cross-origin parent; fine */
 	}

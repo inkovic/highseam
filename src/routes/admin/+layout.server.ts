@@ -18,7 +18,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 
 	return {
 		user,
-		title: cms.config.admin?.title ?? 'svelte-payload',
+		title: cms.config.admin?.title ?? 'highseam',
 		theme: cms.config.admin?.theme ?? 'system',
 		collections: cms.collections.filter((c) => !c.admin?.hidden).map(toClientCollection),
 		globals: cms.globals

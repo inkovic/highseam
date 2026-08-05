@@ -180,8 +180,8 @@
 		if (!sel || sel.rangeCount === 0) return null;
 		let n: Node | null = sel.getRangeAt(0).startContainer;
 		while (n) {
-			if (n instanceof HTMLElement && n.dataset.spNode) {
-				const nodeKey = n.dataset.spNode;
+			if (n instanceof HTMLElement && n.dataset.hsNode) {
+				const nodeKey = n.dataset.hsNode;
 				const i = nodes.findIndex((x) => x._key === nodeKey);
 				return i >= 0 ? { i, el: n } : null;
 			}
@@ -485,7 +485,7 @@
 							role="textbox"
 							aria-multiline="true"
 							tabindex="0"
-							data-sp-node={node._key}
+							data-hs-node={node._key}
 							use:editable={{ html: node.html, key: node._key }}
 							oninput={(e) => onTextInput(e, i)}
 							onkeydown={(e) => onTextKeydown(e, i)}

@@ -41,7 +41,7 @@
 		clearTimeout(pushTimer);
 		pushTimer = setTimeout(() => {
 			iframeEl?.contentWindow?.postMessage(
-				{ type: 'svelte-payload:preview', doc: formDoc() },
+				{ type: 'highseam:preview', doc: formDoc() },
 				'*'
 			);
 		}, 300);
@@ -49,7 +49,7 @@
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		const onMsg = (e: MessageEvent) => {
-			if ((e.data as { type?: string })?.type === 'svelte-payload:preview-ready') {
+			if ((e.data as { type?: string })?.type === 'highseam:preview-ready') {
 				previewReady = true;
 				pushPreview();
 			}

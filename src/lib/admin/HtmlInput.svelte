@@ -87,7 +87,7 @@
 					tabindex="0"
 					use:mounted={html}
 					oninput={sync}
-					style="background:var(--sp-canvas);color:var(--sp-canvas-fg);"
+					style="background:var(--hs-canvas);color:var(--hs-canvas-fg);"
 					class="html-surface min-h-56 px-4 py-3 text-sm focus:outline-none"
 				></div>
 			{/key}

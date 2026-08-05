@@ -80,7 +80,7 @@ export function getCMS(cmsConfig: CMSConfig, platform?: App.Platform): CMS {
 	if (!nodeCms) {
 		if (!dev) {
 			console.warn(
-				'[svelte-payload] No D1 binding found in production — falling back to ephemeral in-memory storage.'
+				'[highseam] No D1 binding found in production — falling back to ephemeral in-memory storage.'
 			);
 		}
 		nodeCms = new CMS({ ...cmsConfig, secret }, nodeFileAdapter(), new FsStorage());
@@ -88,7 +88,7 @@ export function getCMS(cmsConfig: CMSConfig, platform?: App.Platform): CMS {
 	return nodeCms;
 }
 
-export const TOKEN_COOKIE = 'sp_token';
+export const TOKEN_COOKIE = 'hs_token';
 
 export async function getUserFromCookies(
 	cms: CMS,
@@ -102,7 +102,7 @@ export async function getUserFromCookies(
  * (API-key header first, then session cookie).
  *
  *   // src/hooks.server.ts
- *   import { createCMSHandle } from 'svelte-payload/server';
+ *   import { createCMSHandle } from 'highseam/server';
  *   import cmsConfig from './cms.config';
  *   export const handle = createCMSHandle(cmsConfig);
  */

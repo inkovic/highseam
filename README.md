@@ -1,4 +1,4 @@
-# svelte-payload
+# highseam
 
 [Payload CMS](https://github.com/payloadcms/payload), recreated in **SvelteKit**.
 
@@ -9,18 +9,18 @@ counts, so the same core runs on Node and Cloudflare Workers.
 
 ## Use it in your own SvelteKit app
 
-svelte-payload is a package. From this repo:
+highseam is a package. From this repo:
 
 ```sh
-npm run package && npm pack        # → svelte-payload-0.1.0.tgz
+npm run package && npm pack        # → highseam-0.1.0.tgz
 ```
 
 Then in any SvelteKit project (Tailwind v4 assumed):
 
 ```sh
-npm i ../path/to/svelte-payload-0.1.0.tgz
-npx svelte-payload-init            # scaffolds routes, hooks, cms.config.ts, theme
-# import '../svelte-payload.css' once in your root layout, then:
+npm i ../path/to/highseam-0.1.0.tgz
+npx highseam-init            # scaffolds routes, hooks, cms.config.ts, theme
+# import '../highseam.css' once in your root layout, then:
 npm run dev                        # → /admin, create the first user
 ```
 
@@ -38,13 +38,13 @@ Everything is driven by your `src/cms.config.ts`.
   exist" until you seed it:
   `npx wrangler d1 execute <db-name> --local --file schema.sql`.
 - **Consumer Tailwind must scan the package.** The scaffolded
-  `svelte-payload.css` includes `@source "../node_modules/svelte-payload/dist"`
+  `highseam.css` includes `@source "../node_modules/highseam/dist"`
   — Tailwind v4 doesn't scan `node_modules`, so without it the admin's
   utilities (tabs, grids, picker) don't generate and the layout collapses. If
   you scaffolded before 0.4.0, add that line.
-- **Don't name your app `svelte-payload`** — npm/pnpm refuse a dependency whose
+- **Don't name your app `highseam`** — npm/pnpm refuse a dependency whose
   name matches the host package.
-- **Bump the tarball filename each release** (`svelte-payload-0.4.0.tgz`, …).
+- **Bump the tarball filename each release** (`highseam-0.4.0.tgz`, …).
   In-place `file:` tarball swaps under the same name trip pnpm's lockfile
   integrity check.
 - Engine updates arrive via `npm i <new tarball>`; scaffolded stubs are
@@ -153,7 +153,7 @@ databases never touches collection code.
 ## Deploying to Cloudflare
 
 ```sh
-wrangler d1 create svelte-payload-db   # then uncomment the binding in wrangler.toml
+wrangler d1 create highseam-db   # then uncomment the binding in wrangler.toml
 npm run deploy
 ```
 
@@ -169,7 +169,7 @@ separate deploy sharing the DB) verifies it and renders unpublished content:
 
 ```ts
 // public site — src/routes/[type]/[slug]/+page.server.ts
-import { verifyPreviewToken } from 'svelte-payload/preview';
+import { verifyPreviewToken } from 'highseam/preview';
 const claims = await verifyPreviewToken(env.CMS_SECRET, url.searchParams.get('token'));
 const doc = claims ? await readDraft(claims.collection, claims.id) : await readPublished(slug);
 ```
@@ -177,14 +177,14 @@ const doc = claims ? await readDraft(claims.collection, claims.id) : await readP
 Two modes: the iframe reloads on save (Mode A), and the form postMessages the
 in-progress doc as you type for true live preview (Mode B) — subscribe with
 `onPreviewData(cb)`. Drop `<PreviewBanner/>` (from
-`svelte-payload/PreviewBanner.svelte`) into the previewed page. See
+`highseam/PreviewBanner.svelte`) into the previewed page. See
 `src/routes/preview/venues/[id]` for a working reference.
 
 ## Admin: theming, tabs, filters, bulk
 
 - **Theme** — `admin.theme: 'light' | 'dark' | 'system'`. Every color is a
   `--color-*` CSS variable a consumer can override; the editor surface is its
-  own `--sp-canvas` token.
+  own `--hs-canvas` token.
 - **Form layout** — `admin.group` on fields + `admin.groupsAs: 'tabs'`
   turns a 60-field form into tabs; `admin.position: 'sidebar'` pulls meta
   fields into a side column.

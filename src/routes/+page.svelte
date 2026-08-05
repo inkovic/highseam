@@ -13,28 +13,28 @@
 			body: 'JSON-file storage in dev, Cloudflare D1 in production — swap databases without touching collection code.'
 		},
 		{
-			title: 'Payload-style REST',
+			title: 'REST + GraphQL, generated',
 			body: 'GET /api/posts?where[status][equals]=published&depth=1 — query operators, pagination, and relationship population included.'
 		}
 	];
 </script>
 
 <svelte:head>
-	<title>svelte-payload — a Payload-inspired CMS for SvelteKit</title>
+	<title>highseam — a CMS that runs where your site does</title>
 	<meta
 		name="description"
-		content="A config-driven headless CMS recreated in SvelteKit: auto-generated admin panel, REST API, auth, access control, and hooks."
+		content="A config-driven headless CMS for SvelteKit: generated admin panel, REST + GraphQL, drafts, media and access control — running on Workers and D1."
 	/>
 </svelte:head>
 
 <main class="mx-auto max-w-3xl px-6 py-24">
-	<p class="mb-3 text-sm font-medium text-(--color-primary)">svelte-payload</p>
+	<p class="mb-3 text-sm font-medium text-(--color-primary)">highseam</p>
 	<h1 class="text-4xl leading-tight font-semibold tracking-tight">
-		Payload CMS, recreated in SvelteKit.
+		A CMS that runs where your site does.
 	</h1>
 	<p class="mt-4 max-w-xl text-(--color-muted)">
 		One config file in, three things out: a database schema, a REST API, and a full admin panel.
-		Inspired by Payload's architecture, rebuilt natively for SvelteKit + Cloudflare.
+		Built for SvelteKit and Cloudflare, and happy to sit on the database you already have.
 	</p>
 	<div class="mt-8 flex gap-3">
 		<a

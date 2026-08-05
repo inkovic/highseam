@@ -1,5 +1,5 @@
 /**
- * Auto-generated GraphQL API — the equivalent of Payload's GraphQL layer.
+ * Auto-generated GraphQL API, built from the same config as everything else.
  * Builds a schema from the CMS config: per-collection queries and mutations,
  * globals, and auth. Relationship fields resolve lazily, so query depth is
  * driven by the GraphQL selection set instead of a `depth` param.

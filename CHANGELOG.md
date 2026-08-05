@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.0.0 — 2026-08-04 · renamed to **highseam**
+
+The project was previously published as `svelte-payload`. That name described
+where it came from rather than what it is, and leaned on someone else's
+trademark. It is now **highseam** — a config-driven CMS that runs at the edge
+and can sit on top of the database you already have.
+
+**Nothing in your data moves.** The `documents` table, collection slugs,
+`_status`, version stores, globals, `_locks`, and every R2 key are keyed by
+*your* collection slugs, never by the package name. Your `cms.config.ts` API
+is unchanged. Your `/api/...` and `/admin/...` URLs are unchanged.
+
+Migrating an existing app:
+
+```sh
+npm uninstall svelte-payload && npm i highseam
+npx highseam-init --migrate      # add --dry-run to preview
+```
+
+The codemod rewrites imports, `svelte-payload.css` → `highseam.css`, the
+Tailwind `@source` path, and `--sp-canvas` → `--hs-canvas` across `src/`.
+Two things it can't do for you: the session cookie is now `hs_token`, so
+everyone is logged out once; and if you re-copy stubs from `templates/` on
+upgrade (recommended), do that as usual.
+
+Renamed identifiers: `--sp-canvas` → `--hs-canvas`, `data-sp-theme` →
+`data-hs-theme`, cookie `sp_token` → `hs_token`, bin `svelte-payload-init` →
+`highseam-init`.
+
+### Also in 1.0.0 — admin quality pass
+
+- **The save bar is sticky and acknowledges the click.** It no longer scrolls
+  out of reach on long forms, the pressed button shows a spinner and "Saving…"
+  immediately instead of leaving you waiting for a toast, and both buttons
+  disable during the request. An "Unsaved changes" hint sits alongside.
+- **Validation errors can no longer hide.** With `groupsAs: 'tabs'`, an error
+  on a field in an inactive tab was completely invisible — the save just
+  appeared to do nothing. Tabs now show an error-count badge, the form jumps
+  to the first tab containing an error, and the field is scrolled into view.
+
+
+
 Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.

@@ -5,7 +5,7 @@
 	let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head><title>Posts — svelte-payload</title></svelte:head>
+<svelte:head><title>Posts — highseam</title></svelte:head>
 
 <main class="mx-auto max-w-2xl px-6 py-16">
 	<a href="/" class="text-sm text-(--color-muted) hover:text-(--color-fg)">← Home</a>

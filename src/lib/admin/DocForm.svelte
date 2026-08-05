@@ -72,6 +72,36 @@
 	const useTabs = $derived(collection.groupsAs === 'tabs' && groupNames.length > 0);
 	let activeTab = $state('');
 	const currentTab = $derived(activeTab || groupNames[0] || '');
+
+	/** How many errored fields sit in each group — so a tab can show a badge. */
+	const errorsByGroup = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const f of visibleFields) {
+			if (!errors[f.name] || !f.admin.group) continue;
+			counts[f.admin.group] = (counts[f.admin.group] ?? 0) + 1;
+		}
+		return counts;
+	});
+
+	// A validation error inside a collapsed/inactive tab is invisible: the save
+	// looks like it silently did nothing. Jump to the first tab that has one.
+	let lastErrorKey = '';
+	$effect(() => {
+		const keys = Object.keys(errors);
+		if (keys.length === 0) return;
+		const sig = keys.join(',');
+		if (sig === lastErrorKey) return;
+		lastErrorKey = sig;
+		const firstBad = visibleFields.find((f) => errors[f.name]);
+		if (firstBad?.admin.group && useTabs) activeTab = firstBad.admin.group;
+		// Scroll it into view whichever layout we're in.
+		queueMicrotask(() => {
+			if (!firstBad) return;
+			formEl
+				?.querySelector(`[name="${CSS.escape(firstBad.name)}"]`)
+				?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		});
+	});
 	const inputClass =
 		'w-full rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2 text-sm focus:border-(--color-primary) focus:outline-none';
 	const isEdit = $derived(Boolean(values.id));
@@ -79,6 +109,8 @@
 	// --- dirty tracking + guards ---
 	let dirty = $state(false);
 	let submitting = $state(false);
+	/** Which button was pressed, so only that one shows the spinner. */
+	let pendingLabel = $state('');
 	function markDirty() {
 		dirty = true;
 	}
@@ -223,11 +255,16 @@
 				<button
 					type="button"
 					onclick={() => (activeTab = group)}
-					class="-mb-px border-b-2 px-3 py-2 text-sm transition-colors {currentTab === group
+					class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors {currentTab === group
 						? 'border-(--color-primary) font-medium text-(--color-primary)'
 						: 'border-transparent text-(--color-muted) hover:text-(--color-fg)'}"
 				>
 					{group}
+					{#if errorsByGroup[group]}
+						<span class="rounded-full bg-(--color-danger) px-1.5 text-[10px] font-semibold text-white">
+							{errorsByGroup[group]}
+						</span>
+					{/if}
 				</button>
 			{/each}
 		</div>
@@ -262,19 +299,43 @@
 		<p class="text-sm text-(--color-danger)">{message}</p>
 	{/if}
 
-	<div class="flex items-center gap-3 border-t border-(--color-border) pt-5">
-		<button class="rounded-(--radius) bg-(--color-primary) px-5 py-2 text-sm font-semibold text-(--color-primary-fg) hover:opacity-90">
-			{submitLabel}
+	<!-- Sticky: on a 60-field form the actions must never scroll out of reach,
+	     and the click must acknowledge itself immediately rather than leaving
+	     you waiting for a toast. -->
+	<div
+		class="sticky bottom-0 -mx-1 flex items-center gap-3 border-t border-(--color-border) bg-(--color-bg)/95 px-1 py-3 backdrop-blur"
+	>
+		<button
+			disabled={submitting}
+			onclick={() => (pendingLabel = submitLabel)}
+			class="inline-flex items-center gap-2 rounded-(--radius) bg-(--color-primary) px-5 py-2 text-sm font-semibold text-(--color-primary-fg) hover:opacity-90 disabled:opacity-60"
+		>
+			{#if submitting && pendingLabel === submitLabel}
+				<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+				Saving…
+			{:else}
+				{submitLabel}
+			{/if}
 		</button>
 		{#if draftAction}
 			<button
 				formaction={draftAction}
-				class="rounded-(--radius) border border-(--color-border) px-5 py-2 text-sm text-(--color-fg) hover:border-(--color-primary)"
+				disabled={submitting}
+				onclick={() => (pendingLabel = draftLabel)}
+				class="inline-flex items-center gap-2 rounded-(--radius) border border-(--color-border) px-5 py-2 text-sm text-(--color-fg) hover:border-(--color-primary) disabled:opacity-60"
 			>
-				{draftLabel}
+				{#if submitting && pendingLabel === draftLabel}
+					<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+					Saving…
+				{:else}
+					{draftLabel}
+				{/if}
 			</button>
 		{/if}
 		<a href="/admin/{collection.slug}" class="text-sm text-(--color-muted) hover:text-(--color-fg)">Cancel</a>
+		{#if dirty && !submitting}
+			<span class="text-xs text-(--color-muted)">Unsaved changes</span>
+		{/if}
 		{#if autosave && autosaveState !== 'idle'}
 			<span class="ml-auto text-xs {autosaveState === 'error' ? 'text-(--color-danger)' : 'text-(--color-muted)'}">
 				{autosaveState === 'saving' ? 'Autosaving…' : autosaveState === 'saved' ? 'Draft autosaved' : 'Autosave failed'}

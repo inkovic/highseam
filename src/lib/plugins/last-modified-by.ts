@@ -1,5 +1,5 @@
 /**
- * Demo plugin — proves the plugin system works the way Payload's does:
+ * Demo plugin — proves the plugin system works:
  * a pure config transform. Adds a read-only `lastModifiedBy` field and a
  * beforeChange hook to the given collections, recording who saved the doc.
  */

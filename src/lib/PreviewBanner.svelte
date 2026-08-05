@@ -2,7 +2,7 @@
 	/**
 	 * Drop into your public site's layout while in preview mode. Shows a
 	 * banner and an exit link. Pairs with verifyPreviewToken / onPreviewData
-	 * from 'svelte-payload/preview'.
+	 * from 'highseam/preview'.
 	 */
 	let {
 		exitHref = '?',

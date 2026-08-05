@@ -1,5 +1,5 @@
 /**
- * Builds templates/ for the `svelte-payload-init` scaffolder.
+ * Builds templates/ for the `highseam-init` scaffolder.
  * Copies the app's route files and rewrites `$lib/...` imports to package
  * subpath imports, so consumers get thin, customizable route stubs.
  */
@@ -16,15 +16,15 @@ mkdirSync(join(out, 'routes'), { recursive: true });
 /** Rewrite $lib imports to package imports. */
 function rewrite(source) {
 	return source
-		.replace(/from '\$lib\/core'/g, "from 'svelte-payload'")
-		.replace(/from '\$lib\/server'/g, "from 'svelte-payload/server/index.js'")
+		.replace(/from '\$lib\/core'/g, "from 'highseam'")
+		.replace(/from '\$lib\/server'/g, "from 'highseam/server/index.js'")
 		// Bare .svelte component imports keep their extension.
-		.replace(/from '\$lib\/(.+?\.svelte)'/g, "from 'svelte-payload/$1'")
+		.replace(/from '\$lib\/(.+?\.svelte)'/g, "from 'highseam/$1'")
 		// Everything else resolves to the compiled .js — but don't double-append
 		// when the specifier already carries a .js (e.g. runes modules imported
 		// as `foo.svelte.js`).
 		.replace(/from '\$lib\/(.+?)'/g, (_m, p) =>
-			`from 'svelte-payload/${p}${p.endsWith('.js') ? '' : '.js'}'`
+			`from 'highseam/${p}${p.endsWith('.js') ? '' : '.js'}'`
 		);
 }
 
@@ -53,7 +53,7 @@ copyTree(join(root, 'src/routes/media'), join(out, 'routes/media'));
 writeFileSync(
 	join(out, 'hooks.server.ts'),
 	`import type { Handle } from '@sveltejs/kit';
-import { createCMSHandle } from 'svelte-payload/server/index.js';
+import { createCMSHandle } from 'highseam/server/index.js';
 import cmsConfig from './cms.config';
 
 export const handle: Handle = createCMSHandle(cmsConfig) as Handle;
@@ -63,8 +63,8 @@ export const handle: Handle = createCMSHandle(cmsConfig) as Handle;
 // Starter config.
 writeFileSync(
 	join(out, 'cms.config.ts'),
-	`import { defineCollection, defineConfig } from 'svelte-payload';
-import type { AccessFn } from 'svelte-payload';
+	`import { defineCollection, defineConfig } from 'highseam';
+import type { AccessFn } from 'highseam';
 
 const isLoggedIn: AccessFn = ({ req }) => Boolean(req.user);
 
@@ -104,8 +104,8 @@ export default defineConfig({
 writeFileSync(
 	join(out, 'app.d.ts'),
 	`import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
-import type { CMS } from 'svelte-payload/core/cms.js';
-import type { Doc } from 'svelte-payload/core/types.js';
+import type { CMS } from 'highseam/core/cms.js';
+import type { Doc } from 'highseam/core/types.js';
 
 declare global {
 	namespace App {
@@ -131,14 +131,14 @@ export {};
 // Tailwind build scans the packaged admin components — otherwise utilities
 // used only inside dist/ (tab strips, grids, the relation picker) never get
 // generated and the admin layout collapses. Path is relative to where the
-// stub lands (src/svelte-payload.css → ../node_modules/...).
+// stub lands (src/highseam.css → ../node_modules/...).
 const themeCss = readFileSync(join(root, 'src/app.css'), 'utf-8');
 const sourceDirective =
-	`\n/* Scan svelte-payload's shipped admin components for Tailwind classes\n` +
+	`\n/* Scan highseam's shipped admin components for Tailwind classes\n` +
 	`   (Tailwind v4 does not scan node_modules by default). */\n` +
-	`@source "../node_modules/svelte-payload/dist";\n`;
+	`@source "../node_modules/highseam/dist";\n`;
 writeFileSync(
-	join(out, 'svelte-payload.css'),
+	join(out, 'highseam.css'),
 	themeCss.replace(/(@import\s+["']tailwindcss["'];)/, `$1${sourceDirective}`)
 );
 

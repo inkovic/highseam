@@ -1,5 +1,5 @@
 /**
- * Structured rich text — svelte-payload's Lexical equivalent.
+ * Structured rich text — highseam's Lexical equivalent.
  *
  * A document is an array of typed nodes. Text-bearing nodes carry a
  * restricted inline-HTML string (strong/em/code/a/s/u/br only — enforced

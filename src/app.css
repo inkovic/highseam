@@ -2,7 +2,7 @@
 
 /*
  * Admin design tokens. Tailwind v4 generates the utilities (bg-(--color-bg)
- * etc.) from these defaults; the [data-sp-theme] blocks below re-assign the
+ * etc.) from these defaults; the [data-hs-theme] blocks below re-assign the
  * same CSS variables at runtime, so light/dark switch live. Consumers can
  * override any --color-* / --sp-* token in their own stylesheet to rebrand.
  */
@@ -20,15 +20,15 @@
   --color-success: #34d399;
   /* editor/writing surface — its own token so it can stay "paper" in a dark
      shell, or be overridden. Defaults to the elevated surface. */
-  --sp-canvas: var(--color-elevate);
-  --sp-canvas-fg: var(--color-fg);
+  --hs-canvas: var(--color-elevate);
+  --hs-canvas-fg: var(--color-fg);
   --radius: 0.5rem;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 /* Explicit light theme */
-[data-sp-theme="light"] {
+[data-hs-theme="light"] {
   --color-bg: #ffffff;
   --color-elevate: #f7f8fa;
   --color-elevate-2: #eef0f3;
@@ -39,13 +39,13 @@
   --color-primary-fg: #ffffff;
   --color-danger: #dc2626;
   --color-success: #059669;
-  --sp-canvas: #ffffff;
-  --sp-canvas-fg: #1a1c1f;
+  --hs-canvas: #ffffff;
+  --hs-canvas-fg: #1a1c1f;
 }
 
 /* System: follow the OS when theme is unset/system */
 @media (prefers-color-scheme: light) {
-  [data-sp-theme="system"] {
+  [data-hs-theme="system"] {
     --color-bg: #ffffff;
     --color-elevate: #f7f8fa;
     --color-elevate-2: #eef0f3;
@@ -56,8 +56,8 @@
     --color-primary-fg: #ffffff;
     --color-danger: #dc2626;
     --color-success: #059669;
-    --sp-canvas: #ffffff;
-    --sp-canvas-fg: #1a1c1f;
+    --hs-canvas: #ffffff;
+    --hs-canvas-fg: #1a1c1f;
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * The whole CMS is driven by this file — the svelte-payload equivalent of
+ * The whole CMS is driven by this file — the highseam equivalent of
  * payload.config.ts. Collections declared here get a database presence, a
  * REST API, and an admin UI automatically.
  */
@@ -203,7 +203,7 @@ const pages = defineCollection({
 			]
 		},
 		{
-			// Payload-style blocks: a flexible layout builder. Editors add,
+			// Blocks: a flexible layout builder. Editors add,
 			// reorder, and remove blocks of different shapes in the admin.
 			name: 'layout',
 			type: 'blocks',
@@ -299,7 +299,7 @@ const venues = defineCollection({
 });
 
 export default defineConfig({
-	admin: { title: 'svelte-payload' },
+	admin: { title: 'highseam' },
 	localization: { locales: ['en', 'es'], defaultLocale: 'en' },
 	plugins: [lastModifiedBy(['posts', 'pages'])],
 	collections: [users, posts, media, categories, pages, venues],
@@ -307,10 +307,10 @@ export default defineConfig({
 		{
 			slug: 'site-settings',
 			label: 'Site Settings',
-			admin: { description: 'Singleton document — like Payload globals.' },
+			admin: { description: 'Singleton document — one per site, not a collection.' },
 			access: { read: () => true, update: isLoggedIn },
 			fields: [
-				{ name: 'siteName', type: 'text', required: true, defaultValue: 'svelte-payload' },
+				{ name: 'siteName', type: 'text', required: true, defaultValue: 'highseam' },
 				{ name: 'tagline', type: 'text' },
 				{ name: 'logo', type: 'upload', relationTo: 'media' },
 				{

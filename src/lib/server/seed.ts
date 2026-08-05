@@ -26,8 +26,8 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 		sys,
 		'posts',
 		{
-			title: 'Hello from svelte-payload',
-			excerpt: 'A Payload-inspired CMS, recreated natively in SvelteKit.',
+			title: 'Hello from highseam',
+			excerpt: 'A config-driven CMS that runs at the edge, on the database you already have.',
 			content: [
 				{ type: 'h2', html: 'It works' },
 				{
@@ -37,7 +37,7 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 				{
 					type: 'block',
 					blockType: 'callout',
-					fields: { tone: 'info', text: 'Components like this callout are embedded INSIDE the document flow — like Payload\'s Lexical blocks.' }
+					fields: { tone: 'info', text: 'Components like this callout are embedded INSIDE the document flow, not pasted in as markup.' }
 				},
 				{
 					type: 'ul',
@@ -89,19 +89,19 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 			layout: [
 				{
 					blockType: 'hero',
-					heading: 'Payload, recreated in SvelteKit',
+					heading: 'A CMS that runs where your site does',
 					subheading: 'One config file in — database, REST API, and admin panel out.',
 					ctaLabel: 'Open the admin',
 					ctaUrl: '/admin'
 				},
 				{
 					blockType: 'content',
-					body: 'Blocks are Payload\'s flexible layout builder: an ordered list of typed sections. Add, reorder, and remove them in the admin — each block type renders its own fields.'
+					body: 'Blocks are a flexible layout builder: an ordered list of typed sections. Add, reorder, and remove them in the admin — each block type renders its own fields.'
 				},
 				{
 					blockType: 'quote',
-					text: 'The architecture ports cleanly off React.',
-					attribution: 'svelte-payload'
+					text: 'Config in. Database, APIs and an admin out.',
+					attribution: 'highseam'
 				},
 				{
 					blockType: 'feature-grid',
@@ -113,7 +113,7 @@ export async function seed(cms: CMS, adminEmail: string, adminPassword: string):
 					]
 				}
 			],
-			meta: { ogTitle: 'About svelte-payload' }
+			meta: { ogTitle: 'About highseam' }
 		},
 		opts
 	);
