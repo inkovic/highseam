@@ -14,7 +14,7 @@ const OPS = new Set([
 ]);
 
 /**
- * Parse Payload-style query params:
+ * Parse query params:
  *   ?where[status][equals]=published&limit=10&page=2&sort=-createdAt&depth=1
  */
 export function parseFindArgs(url: URL): FindArgs & { depth: number; locale?: string } {
@@ -80,7 +80,7 @@ export async function handleREST(fn: () => Promise<Response>): Promise<Response>
 		if (err instanceof APIError) {
 			return json({ message: err.message }, { status: err.status });
 		}
-		console.error('[svelte-payload]', err);
+		console.error('[highseam]', err);
 		return json({ message: 'Internal server error' }, { status: 500 });
 	}
 }

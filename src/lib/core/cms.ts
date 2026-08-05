@@ -1,5 +1,5 @@
 /**
- * The CMS engine — equivalent of Payload's "Local API".
+ * The CMS engine — the Local API: call it directly server-side, no HTTP.
  * Framework-agnostic: constructed with a config + database adapter, exposes
  * find/findByID/create/update/delete/login/me with access control, hooks,
  * validation, and relationship population.
@@ -739,7 +739,7 @@ export class CMS {
 			try {
 				await this.publish({ user: null }, col.slug, doc.id, { overrideAccess: true });
 			} catch (err) {
-				console.error(`[svelte-payload] scheduled publish failed for ${col.slug}/${doc.id}`, err);
+				console.error(`[highseam] scheduled publish failed for ${col.slug}/${doc.id}`, err);
 			}
 		}
 	}
@@ -932,7 +932,7 @@ export class CMS {
 	/**
 	 * Mint a short-lived preview token for a document (signed with CMS_SECRET).
 	 * The public site verifies it with `verifyPreviewToken` from
-	 * 'svelte-payload/preview' and serves draft/unpublished content.
+	 * 'highseam/preview' and serves draft/unpublished content.
 	 */
 	async signPreviewToken(collection: string, id: string, ttlSeconds = 600): Promise<string> {
 		return signJWT({ sub: id, col: collection, preview: true }, this.secret, ttlSeconds);

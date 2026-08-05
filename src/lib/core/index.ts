@@ -24,7 +24,7 @@ export {
 
 /**
  * Validate the config and apply plugins (each plugin is a config transform,
- * run in order — like Payload).
+ * run in order).
  */
 export function defineConfig(config: CMSConfig): CMSConfig {
 	let out = config;

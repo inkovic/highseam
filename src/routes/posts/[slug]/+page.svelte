@@ -19,7 +19,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.post.title} — svelte-payload</title>
+	<title>{data.post.title} — highseam</title>
 	{#if data.post.excerpt}<meta name="description" content={String(data.post.excerpt)} />{/if}
 </svelte:head>
 

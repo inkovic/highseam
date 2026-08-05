@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	const query = url.searchParams.get('query');
 	if (!query) {
 		return json({
-			message: 'svelte-payload GraphQL endpoint. POST { query, variables } or GET ?query=...'
+			message: 'highseam GraphQL endpoint. POST { query, variables } or GET ?query=...'
 		});
 	}
 	const result = await graphql({

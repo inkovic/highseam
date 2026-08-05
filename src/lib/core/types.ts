@@ -1,9 +1,9 @@
 /**
- * svelte-payload core types.
+ * highseam core types.
  *
  * This module is framework-agnostic: no SvelteKit, no Svelte, no Node-only
  * APIs. The same core runs in Node (vite dev) and on Cloudflare Workers.
- * Modeled closely on Payload CMS's config surface.
+ * Config surface will feel familiar if you've used a config-driven CMS before.
  */
 
 // ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ export interface RelationshipField extends BaseField {
 	hasMany?: boolean;
 }
 
-/** Reference to a document in an upload-enabled collection (like Payload). */
+/** Reference to a document in an upload-enabled collection. */
 export interface UploadField extends BaseField {
 	type: 'upload';
 	relationTo: string;
@@ -150,7 +150,7 @@ export interface ArrayField extends BaseField {
 	fields: Field[];
 }
 
-/** One block shape available inside a blocks field (like Payload's blocks). */
+/** One block shape available inside a blocks field. */
 export interface BlockConfig {
 	slug: string;
 	labels?: { singular: string; plural: string };
@@ -158,7 +158,7 @@ export interface BlockConfig {
 }
 
 /**
- * Payload-style flexible layout builder. Value is an array of
+ * Flexible layout builder. Value is an array of
  * `{ blockType: '<slug>', ...fieldValues }` rows; editors can add, remove,
  * and reorder blocks of different shapes.
  */
@@ -205,7 +205,7 @@ export interface AccessArgs {
 }
 
 /**
- * Like Payload: an access function may return a boolean, OR a Where query
+ * An access function may return a boolean, OR a Where query
  * that constrains which documents the request may touch (e.g. only published
  * posts for anonymous readers).
  */
@@ -276,7 +276,7 @@ export interface CollectionAdminConfig {
 	/**
 	 * Live preview: returns the public URL to show in the admin's preview
 	 * pane for a document. Receives a short-lived preview token to append
-	 * (your front end verifies it with svelte-payload/preview). Runs
+	 * (your front end verifies it with highseam/preview). Runs
 	 * server-side — the CMS never learns your route shape.
 	 */
 	preview?: { url: (doc: Doc, token: string) => string };
@@ -341,7 +341,7 @@ export interface CollectionConfig {
 	slug: string;
 	labels?: { singular: string; plural: string };
 	fields: Field[];
-	/** Enable email+password auth for this collection (like Payload). */
+	/** Enable email+password auth for this collection. */
 	auth?: boolean | AuthConfig;
 	/**
 	 * Make this an upload collection: documents carry a stored file and get
@@ -455,7 +455,7 @@ export interface DatabaseAdapter {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Globals — singleton documents (site settings, nav, footer), like Payload's
+// Globals — singleton documents (site settings, nav, footer)
 // ---------------------------------------------------------------------------
 
 export interface GlobalConfig {
@@ -473,7 +473,7 @@ export interface GlobalConfig {
 }
 
 /**
- * A plugin is a config transform, exactly like Payload: it receives the
+ * A plugin is a config transform: it receives the
  * config and returns a (possibly) modified one. Applied in order by
  * defineConfig.
  */

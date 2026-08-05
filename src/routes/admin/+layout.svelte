@@ -15,7 +15,7 @@
 	<title>{data.title} — Admin</title>
 </svelte:head>
 
-<div data-sp-theme={data.theme} class="min-h-screen bg-(--color-bg) text-(--color-fg)">
+<div data-hs-theme={data.theme} class="min-h-screen bg-(--color-bg) text-(--color-fg)">
 <Toasts />
 {#if data.user}
 	<div class="flex min-h-screen">
