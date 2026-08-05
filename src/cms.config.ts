@@ -64,7 +64,15 @@ const media = defineCollection({
 		update: isLoggedIn,
 		delete: isLoggedIn
 	},
-	fields: [{ name: 'alt', type: 'text', admin: { description: 'Alt text for accessibility' } }]
+	// Conventional metadata: defined here, not injected by the framework.
+	// resolveMedia() treats these as the inherited defaults for every use.
+	fields: [
+		{ name: 'alt', type: 'text', admin: { description: 'Default alt text — inherited wherever this image is used' } },
+		{ name: 'caption', type: 'text' },
+		{ name: 'credit', type: 'text', admin: { description: 'Attribution / photographer' } },
+		{ name: 'tags', type: 'json', admin: { description: 'Labels, e.g. ["hero","beach"]' } },
+		{ name: 'focalPoint', type: 'json', admin: { hidden: true } }
+	]
 });
 
 const categories = defineCollection({

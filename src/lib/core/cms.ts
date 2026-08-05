@@ -5,6 +5,7 @@
  * validation, and relationship population.
  */
 import { matchesWhere } from './adapters/memory';
+import { extractRichTextRefs } from './richtext';
 import { hashPassword, signJWT, verifyJWT, verifyPassword } from './crypto';
 import type {
 	AccessArgs,
@@ -444,6 +445,91 @@ export class CMS {
 	// -------------------------------------------------------------------------
 	// Write
 	// -------------------------------------------------------------------------
+
+	// -------------------------------------------------------------------------
+	// Usage / references
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Every id of `targetSlug` referenced by any other collection.
+	 *
+	 * Computed on demand rather than maintained as an index: a maintained
+	 * table would need every write in the system to diff old/new values and
+	 * update backlinks — write-path complexity plus a permanent risk of drift.
+	 * This scan is O(collections with references), not O(documents), and is
+	 * always correct by construction. Add a cache when it's measurably slow,
+	 * not before.
+	 */
+	async referencedIds(targetSlug: string): Promise<Set<string>> {
+		await this.init();
+		const referenced = new Set<string>();
+
+		for (const col of this.config.collections) {
+			const fields = col.fields.filter(
+				(f) => (f.type === 'relationship' || f.type === 'upload') && f.relationTo === targetSlug
+			);
+			// richText fields can embed uploads/relationships inside their nodes.
+			const richTextFields = col.fields.filter(
+				(f) =>
+					f.type === 'richText' &&
+					(f.uploads === targetSlug || (f.relationships ?? []).includes(targetSlug))
+			);
+			if (fields.length === 0 && richTextFields.length === 0) continue;
+
+			const { docs } = await this.db.find(col.slug, { limit: 0 });
+			for (const doc of docs) {
+				for (const f of fields) {
+					const v = doc[f.name];
+					for (const id of Array.isArray(v) ? v : [v]) {
+						if (typeof id === 'string' && id) referenced.add(id);
+					}
+				}
+				for (const f of richTextFields) {
+					for (const ref of extractRichTextRefs(doc[f.name])) {
+						if (ref.relationTo === targetSlug) referenced.add(ref.id);
+					}
+				}
+			}
+		}
+		return referenced;
+	}
+
+	/** Where a specific document is used: [{collection, id, field, title}]. */
+	async findUsage(
+		targetSlug: string,
+		id: string
+	): Promise<{ collection: string; id: string; field: string; title: string }[]> {
+		await this.init();
+		const uses: { collection: string; id: string; field: string; title: string }[] = [];
+
+		for (const col of this.config.collections) {
+			const titleKey = col.admin?.useAsTitle ?? 'id';
+			const direct = col.fields.filter(
+				(f) => (f.type === 'relationship' || f.type === 'upload') && f.relationTo === targetSlug
+			);
+			const rich = col.fields.filter(
+				(f) =>
+					f.type === 'richText' &&
+					(f.uploads === targetSlug || (f.relationships ?? []).includes(targetSlug))
+			);
+			if (direct.length === 0 && rich.length === 0) continue;
+
+			const { docs } = await this.db.find(col.slug, { limit: 0 });
+			for (const doc of docs) {
+				const title = String(doc[titleKey] ?? doc.id);
+				for (const f of direct) {
+					const v = doc[f.name];
+					const hit = (Array.isArray(v) ? v : [v]).some((x) => x === id);
+					if (hit) uses.push({ collection: col.slug, id: doc.id, field: f.name, title });
+				}
+				for (const f of rich) {
+					if (extractRichTextRefs(doc[f.name]).some((r) => r.id === id))
+						uses.push({ collection: col.slug, id: doc.id, field: f.name, title });
+				}
+			}
+		}
+		return uses;
+	}
 
 	// -------------------------------------------------------------------------
 	// Uploads

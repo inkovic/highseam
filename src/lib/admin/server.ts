@@ -8,6 +8,12 @@ export interface RelOption {
 	/** Present for upload collections (image previews in the admin). */
 	url?: string;
 	mimeType?: string;
+	filesize?: number;
+	/** Conventional media metadata, surfaced for inherit-then-override. */
+	alt?: string;
+	caption?: string;
+	credit?: string;
+	tags?: string[];
 }
 
 /** Collect every collection slug referenced by relationship fields, recursively. */

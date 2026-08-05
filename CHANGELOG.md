@@ -4,6 +4,38 @@ Engine (`dist/`, installed from the tarball) upgrades cleanly via `npm i`.
 Scaffolded route stubs are ejected at init time and do NOT auto-update —
 re-run templates by hand if a release notes a stub change.
 
+## 0.6.0 — 2026-08-04
+
+Media system v2, part one: finding images, and describing them once.
+
+- **Modal media browser.** Upload fields now open a real library: thumbnail
+  grid, search-as-you-type, mime/unused filters, sort, paging, keyboard
+  traversal (arrows + enter), and upload-from-inside-the-modal. Nothing is
+  loaded until you open it, so it doesn't care how large the library is.
+  Ordinary relationships keep the lightweight inline typeahead — the right
+  tool for a short list.
+- **One endpoint grew rather than a new one appearing.**
+  `/api/<collection>/options` now supports `page`/`limit` (returning
+  `totalDocs`/`totalPages`), `mime`, `unused`, `sort`, and — for upload
+  collections — OR-matching across `filename`, `alt`, `caption`, `credit`,
+  `tags` and `source.originUrl`. `Where` is AND-only, so the OR runs as
+  parallel access-checked queries merged by id.
+- **Media metadata by convention, not injection.** If your upload collection
+  declares `alt` / `caption` / `credit` / `tags` / `focalPoint`, they become
+  the inherited defaults; if it doesn't, nothing changes. The framework never
+  forces a schema on your media collection.
+- **`resolveMedia(doc, overrides)`** in core so every renderer resolves
+  inheritance identically: image metadata as the default, per-use overrides on
+  top, `undefined` meaning inherit and `''` meaning "deliberately empty".
+  Ships with `focalObjectPosition()` — honours a hotspot through plain CSS
+  `object-fit: cover`, no transform layer required.
+- **Usage scanning:** `cms.referencedIds(slug)` and `cms.findUsage(slug, id)`,
+  covering direct relationship/upload fields *and* rich-text embeds. Computed
+  on demand (O(collections), not O(documents)) rather than as a maintained
+  index — always correct, no write-path complexity. Powers the `unused` filter
+  and, later, safe-delete warnings.
+- Tests: `npm test` (richtext split + media inheritance, 46 assertions).
+
 ## 0.5.1 — 2026-08-04
 
 Media UX, and one consistency pull-back.
