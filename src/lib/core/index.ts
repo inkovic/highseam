@@ -11,6 +11,16 @@ export { validateData, sanitizeData, applyDefaults } from './validate';
 export { generateTypes } from './typegen';
 export { getSchema } from './graphql';
 export { sanitizeDocumentHtml, sanitizeNodes, extractRichTextRefs } from './richtext';
+export {
+	resolveMedia,
+	mediaMeta,
+	focalObjectPosition,
+	normalizeFocalPoint,
+	MEDIA_META_FIELDS,
+	type MediaMeta,
+	type ResolvedMedia,
+	type FocalPoint
+} from './media';
 
 /**
  * Validate the config and apply plugins (each plugin is a config transform,

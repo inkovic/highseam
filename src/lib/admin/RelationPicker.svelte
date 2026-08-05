@@ -10,6 +10,7 @@
 	 *    from /api/<collection>/options?q=…, and selected ids whose titles
 	 *    aren't preloaded are resolved via ?ids=… so chips still read nicely.
 	 */
+	import MediaPicker from './MediaPicker.svelte';
 	import type { RelOption } from './server';
 
 	let {
@@ -128,6 +129,27 @@
 	let uploading = $state(false);
 	let uploadError = $state('');
 	let dragOver = $state(false);
+	// Upload fields get the modal browser; ordinary relationships keep the
+	// lightweight inline typeahead, which is the right tool for a short list.
+	let browserOpen = $state(false);
+	const isMedia = $derived(Boolean(uploadUrl));
+
+	function applyPicked(ids: string[]) {
+		selectedIds = ids;
+		onChange?.(selectedIds);
+		// Pull titles/thumbnails for anything new so chips render immediately.
+		const missing = ids.filter((id) => !byId.has(id));
+		if (missing.length && searchUrl) {
+			fetch(`${searchUrl}?ids=${encodeURIComponent(missing.join(','))}`)
+				.then((r) => (r.ok ? r.json() : { options: [] }))
+				.then((d: { options: RelOption[] }) => {
+					const m = new Map(extra);
+					for (const o of d.options) m.set(o.id, o);
+					extra = m;
+				})
+				.catch(() => {});
+		}
+	}
 
 	async function uploadFiles(files: FileList | File[]) {
 		if (!uploadUrl || readOnly) return;
@@ -219,7 +241,29 @@
 		</div>
 	{/if}
 
-	{#if !readOnly && (hasMany || selectedIds.length === 0)}
+	{#if !readOnly && isMedia}
+		<!-- Media: browse the library in a modal rather than a flat typeahead. -->
+		<div class="flex flex-wrap items-center gap-2">
+			<button
+				type="button"
+				class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-xs text-(--color-fg) hover:border-(--color-primary) hover:text-(--color-primary)"
+				onclick={() => (browserOpen = true)}
+			>
+				{selectedIds.length ? 'Change…' : `Browse ${relationTo}…`}
+			</button>
+			{#if selectedIds.length > 0 && !hasMany}
+				<button
+					type="button"
+					class="text-xs text-(--color-muted) hover:text-(--color-danger)"
+					onclick={() => remove(selectedIds[0])}
+				>
+					Remove
+				</button>
+			{/if}
+		</div>
+	{/if}
+
+	{#if !readOnly && !isMedia && (hasMany || selectedIds.length === 0)}
 		<input
 			type="text"
 			class={inputClass}
@@ -256,9 +300,9 @@
 		{/if}
 	{/if}
 
-	{#if uploadUrl && !readOnly}
-		<!-- Choose or drop a file right here; it becomes a document in the
-		     upload collection and is selected immediately. -->
+	{#if uploadUrl && !readOnly && selectedIds.length === 0}
+		<!-- Empty state keeps the direct drop zone: the fastest path when you
+		     already have the file and don't need to browse anything. -->
 		<label
 			class="mt-1.5 flex cursor-pointer items-center justify-center gap-2 rounded-(--radius) border border-dashed px-3 py-2 text-xs transition-colors {dragOver
 				? 'border-(--color-primary) bg-(--color-primary)/10 text-(--color-primary)'
@@ -298,3 +342,15 @@
 	{/if}
 	<p class="mt-1 text-xs text-(--color-muted)">→ {relationTo}{hasMany ? ' (multiple)' : ''}</p>
 </div>
+
+{#if isMedia && searchUrl}
+	<MediaPicker
+		bind:open={browserOpen}
+		{relationTo}
+		optionsUrl={searchUrl}
+		{uploadUrl}
+		{hasMany}
+		{selectedIds}
+		onPick={applyPicked}
+	/>
+{/if}
