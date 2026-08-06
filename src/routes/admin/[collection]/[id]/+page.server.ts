@@ -50,6 +50,12 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		// Document locking: try to take the edit lock.
 		const lock = await cms.takeLock(params.collection, params.id, user);
 
+		// Media docs: live usage backlinks ("used in N places") + provenance.
+		let usage: { collection: string; id: string; field: string; title: string }[] = [];
+		if (cms.uploadConfig(col)) {
+			usage = await cms.findUsage(params.collection, params.id);
+		}
+
 		// Live preview: mint a short-lived token and resolve the public URL.
 		let previewUrl: string | null = null;
 		if (col.admin?.preview) {
@@ -71,6 +77,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			locale: locale ?? cms.config.localization?.defaultLocale ?? null,
 			locales: cms.config.localization?.locales ?? [],
 			hasLocalizedFields: col.fields.some((f) => f.localized),
+			usage,
 			lockedBy: lock.lockedBy,
 			previewUrl
 		};

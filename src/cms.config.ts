@@ -71,7 +71,11 @@ const media = defineCollection({
 		{ name: 'caption', type: 'text' },
 		{ name: 'credit', type: 'text', admin: { description: 'Attribution / photographer' } },
 		{ name: 'tags', type: 'json', admin: { description: 'Labels, e.g. ["hero","beach"]' } },
-		{ name: 'focalPoint', type: 'json', admin: { hidden: true } }
+		{ name: 'focalPoint', type: 'json', admin: { hidden: true } },
+		// Provenance (importer-set via /api/media/import; searchable by
+		// externalKey and firstUsedIn slug/title).
+		{ name: 'source', type: 'json', admin: { group: 'Provenance', readOnly: true } },
+		{ name: 'firstUsedIn', type: 'json', admin: { group: 'Provenance', readOnly: true } }
 	]
 });
 

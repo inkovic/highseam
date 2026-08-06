@@ -447,6 +447,145 @@ export class CMS {
 	// -------------------------------------------------------------------------
 
 	// -------------------------------------------------------------------------
+	// Media import — provenance-aware create-or-update for pipelines
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Import one media item. Designed for external pipelines (mirror scripts,
+	 * backfills) whose facts differ from human uploads in three ways:
+	 *
+	 * 1. **Identity is importer-declared.** Origin URLs can be signed and rot
+	 *    (re-fetching mints a different URL for the same photo), so dedupe
+	 *    keys on `source.externalKey` — e.g. `venue:8545` — never on URL
+	 *    equality. A matching key means UPDATE the existing doc: identity and
+	 *    usage backlinks survive a re-mint that changes url and bytes.
+	 * 2. **Adopt-in-place.** `storageKey` references an object that already
+	 *    exists in storage — no byte movement. A backfill of thousands of
+	 *    existing files creates documents only. Adopted keys are
+	 *    importer-owned: highseam never deletes them on update/delete.
+	 * 3. **Provenance is importer-settable.** `source` / `firstUsedIn` /
+	 *    metadata are stated, not inferred; imports know their own story.
+	 *    `firstUsedIn` is a historical fact — once set it is never silently
+	 *    changed (live usage is computed separately via findUsage).
+	 *
+	 * Never silent: returns `{ doc, action }` where action is
+	 * 'created' | 'updated' | 'unchanged'.
+	 */
+	async importMedia(
+		req: ReqContext,
+		slug: string,
+		item: {
+			/** Raw file bytes (multipart path). Mutually exclusive with storageKey. */
+			file?: File;
+			/** Adopt an EXISTING storage object (no upload, importer-owned key). */
+			storageKey?: string;
+			filename?: string;
+			mimeType?: string;
+			filesize?: number;
+			/** Field path used for dedupe. Default 'source.externalKey'. */
+			dedupeKey?: string;
+			/** Declared collection fields (source, firstUsedIn, alt, tags, …). */
+			data?: Record<string, unknown>;
+		},
+		opts: OperationOptions = {}
+	): Promise<{ doc: Doc; action: 'created' | 'updated' | 'unchanged' }> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.uploadConfig(col)) throw new APIError(`Collection ${slug} is not an upload collection`, 400);
+
+		const data = item.data ?? {};
+
+		// Guardrail: the create/update paths run sanitizeData, which strips
+		// keys the collection doesn't declare. Silently importing thousands of
+		// docs WITHOUT their provenance would be the worst possible outcome,
+		// so fail loudly on the first item instead.
+		const declared = new Set<string>(col.fields.map((f) => f.name));
+		const undeclared = Object.keys(data).filter((k) => !declared.has(k));
+		if (undeclared.length > 0) {
+			throw new APIError(
+				`Import data contains fields not declared on "${slug}": ${undeclared.join(', ')}. ` +
+					`Declare them on the collection (e.g. { name: '${undeclared[0]}', type: 'json' }) ` +
+					`or remove them — undeclared fields would be silently dropped by sanitization.`,
+				400
+			);
+		}
+
+		const dedupeKey = item.dedupeKey ?? 'source.externalKey';
+		const dedupeValue = dedupeKey
+			.split('.')
+			.reduce<unknown>((acc, k) => (acc && typeof acc === 'object' ? (acc as Doc)[k] : undefined), data);
+
+		// --- find existing by identity ---------------------------------------
+		let existing: Doc | null = null;
+		if (typeof dedupeValue === 'string' && dedupeValue) {
+			const { docs } = await this.db.find(slug, {
+				where: { [dedupeKey]: { equals: dedupeValue } },
+				limit: 1
+			});
+			existing = docs[0] ?? null;
+		}
+
+		// --- managed file fields ----------------------------------------------
+		let fileFields: Record<string, unknown> = {};
+		if (item.file) {
+			// Normal storage path: mime/size limits apply, we own the key.
+			if (!opts.overrideAccess) {
+				const access = await this.evalAccess(col, existing ? 'update' : 'create', { req, data });
+				if (!access.allowed) throw new APIError('Forbidden', 403);
+			}
+			fileFields = await this.storeFile(col, item.file);
+		} else if (item.storageKey) {
+			if (item.storageKey.includes('..')) throw new APIError('Invalid storageKey', 400);
+			fileFields = {
+				storageKey: item.storageKey,
+				url: `/media/${item.storageKey}`,
+				// Importer-stated facts; the file is not read to verify them.
+				filename: item.filename ?? item.storageKey.split('/').pop() ?? 'file',
+				mimeType: item.mimeType ?? 'application/octet-stream',
+				...(item.filesize !== undefined ? { filesize: item.filesize } : {}),
+				/** Marks the stored object as importer-owned: never auto-deleted. */
+				_adopted: true
+			};
+		} else if (!existing) {
+			throw new APIError('Import item needs either `file` or `storageKey`', 400);
+		}
+
+		// --- update under the same identity -----------------------------------
+		if (existing) {
+			// firstUsedIn is history: never silently overwritten.
+			const merged = { ...data };
+			if (existing.firstUsedIn && merged.firstUsedIn) delete merged.firstUsedIn;
+
+			const before = JSON.stringify(
+				Object.fromEntries(Object.keys({ ...merged, ...fileFields }).map((k) => [k, existing![k]]))
+			);
+			const after = JSON.stringify({ ...merged, ...fileFields });
+			if (before === after) return { doc: existing, action: 'unchanged' };
+
+			const updated = await this.update(req, slug, existing.id, merged, {
+				...opts,
+				overrideAccess: opts.overrideAccess
+			});
+			// Managed fields bypass sanitizeData (they're not declared fields).
+			const withFile =
+				Object.keys(fileFields).length > 0
+					? await this.db.update(slug, existing.id, fileFields)
+					: updated;
+			return { doc: this.sanitizeOutput(col, withFile), action: 'updated' };
+		}
+
+		// --- create -----------------------------------------------------------
+		if (!opts.overrideAccess) {
+			const access = await this.evalAccess(col, 'create', { req, data });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+		const clean = applyDefaults(col, sanitizeData(col, data));
+		validateData(col, clean);
+		const doc = await this.db.create(slug, { ...clean, ...fileFields });
+		return { doc: this.sanitizeOutput(col, doc), action: 'created' };
+	}
+
+	// -------------------------------------------------------------------------
 	// Usage / references
 	// -------------------------------------------------------------------------
 
@@ -655,12 +794,14 @@ export class CMS {
 				throw new APIError('Forbidden', 403);
 		}
 
-		// Replacement file: store new, remove old.
+		// Replacement file: store new, remove old (adopted keys are
+		// importer-owned and never auto-deleted).
 		if (file) {
 			Object.assign(data, await this.storeFile(col, file));
-			if (typeof originalDoc.storageKey === 'string' && this.storage) {
+			if (typeof originalDoc.storageKey === 'string' && this.storage && !originalDoc._adopted) {
 				await this.storage.delete(originalDoc.storageKey).catch(() => {});
 			}
+			if (originalDoc._adopted) data._adopted = false; // we own the new bytes
 		}
 
 		const locale = this.resolveLocale(opts);
@@ -868,8 +1009,15 @@ export class CMS {
 
 		await this.db.delete(slug, id);
 
-		// Upload collections: remove the stored file too.
-		if (this.uploadConfig(col) && typeof doc.storageKey === 'string' && this.storage) {
+		// Upload collections: remove the stored file too — unless the object
+		// was adopted from an importer-owned key (we didn't create it, we
+		// don't destroy it).
+		if (
+			this.uploadConfig(col) &&
+			typeof doc.storageKey === 'string' &&
+			this.storage &&
+			!doc._adopted
+		) {
 			await this.storage.delete(doc.storageKey).catch(() => {});
 		}
 

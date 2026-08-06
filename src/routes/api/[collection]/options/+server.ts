@@ -65,7 +65,10 @@ export const GET: RequestHandler = ({ locals, params, url }) =>
 		const searchable = [titleKey, 'filename'].filter((f) => f === 'filename' ? isUpload : true);
 		if (isUpload) {
 			for (const f of ['alt', 'caption', 'credit', 'tags']) if (fieldNames.has(f)) searchable.push(f);
-			if (fieldNames.has('source')) searchable.push('source.originUrl');
+			// Provenance search: "type the venue slug you remember, not the
+			// filename you don't".
+			if (fieldNames.has('source')) searchable.push('source.originUrl', 'source.externalKey');
+			if (fieldNames.has('firstUsedIn')) searchable.push('firstUsedIn.slug', 'firstUsedIn.title');
 		}
 		const uniqueSearchable = [...new Set(searchable)].filter((f) => f !== 'id');
 
