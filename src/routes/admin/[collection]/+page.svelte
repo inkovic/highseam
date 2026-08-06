@@ -197,8 +197,13 @@
 			{:else}
 				<tr>
 					<td colspan={columns.length + 2} class="px-4 py-12 text-center text-(--color-muted)">
-						No documents match.
-						<a href="/admin/{data.collection.slug}/create" class="text-(--color-primary) hover:underline">Create one</a>
+						{#if data.search || data.facets.some((f) => f.value)}
+							Nothing matches these filters.
+							<a href="?" class="text-(--color-primary) hover:underline">Clear them</a>
+						{:else}
+							No {data.collection.labels.plural.toLowerCase()} yet.
+							<a href="/admin/{data.collection.slug}/create" class="text-(--color-primary) hover:underline">Create the first one</a>
+						{/if}
 					</td>
 				</tr>
 			{/each}

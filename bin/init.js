@@ -130,15 +130,81 @@ if (!existsSync(appDts) || readFileSync(appDts, 'utf-8').includes('// interface 
 	skipped.push('src/app.d.ts (add Locals.cms / Locals.user yourself — see templates/app.d.ts)');
 }
 
+// ---------------------------------------------------------------------------
+// Wiring: init must leave a RUNNING app, or say exactly why not. The admin
+// theme needs Tailwind v4; a missing plugin 500s the whole site on first
+// `dev`, which is the worst possible first impression.
+// ---------------------------------------------------------------------------
+
+const updated = [];
+const manual = [];
+
+// 1. vite.config: add the Tailwind plugin when the file is recognizable.
+const viteConfigPath = ['vite.config.ts', 'vite.config.js']
+	.map((f) => join(cwd, f))
+	.find((f) => existsSync(f));
+if (viteConfigPath) {
+	const vite = readFileSync(viteConfigPath, 'utf-8');
+	if (!vite.includes('@tailwindcss/vite')) {
+		if (vite.includes('sveltekit') && vite.includes('plugins: [')) {
+			const patched = vite
+				.replace(/(import\s.+from\s+['"]@sveltejs\/kit\/vite['"];?)/, "$1\nimport tailwindcss from '@tailwindcss/vite';")
+				.replace('plugins: [', 'plugins: [tailwindcss(), ');
+			writeFileSync(viteConfigPath, patched);
+			updated.push(viteConfigPath.replace(cwd + '/', '') + ' (added @tailwindcss/vite plugin)');
+		} else {
+			manual.push(`add the Tailwind plugin to ${viteConfigPath.replace(cwd + '/', '')}:\n       import tailwindcss from '@tailwindcss/vite';\n       plugins: [tailwindcss(), sveltekit()]`);
+		}
+	}
+}
+
+// 2. Root layout: import the theme once.
+const layoutPath = join(cwd, 'src/routes/+layout.svelte');
+if (existsSync(layoutPath)) {
+	const layout = readFileSync(layoutPath, 'utf-8');
+	if (!layout.includes('highseam.css')) {
+		if (layout.includes('<script')) {
+			writeFileSync(layoutPath, layout.replace(/(<script[^>]*>)/, "$1\n\timport '../highseam.css';"));
+			updated.push('src/routes/+layout.svelte (imported highseam.css)');
+		} else {
+			writeFileSync(layoutPath, `<script>\n\timport '../highseam.css';\n</script>\n\n` + layout);
+			updated.push('src/routes/+layout.svelte (imported highseam.css)');
+		}
+	}
+} else {
+	writeFileSync(
+		layoutPath,
+		`<script lang="ts">\n\timport '../highseam.css';\n\tlet { children } = $props();\n</script>\n\n{@render children()}\n`
+	);
+	created.push('src/routes/+layout.svelte');
+}
+
+// 3. Dependencies: detect what's missing and the package manager in use.
+const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8'));
+const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+const missingDeps = ['tailwindcss', '@tailwindcss/vite'].filter((d) => !allDeps[d]);
+const pm = existsSync(join(cwd, 'pnpm-lock.yaml'))
+	? 'pnpm add -D'
+	: existsSync(join(cwd, 'yarn.lock'))
+		? 'yarn add -D'
+		: existsSync(join(cwd, 'bun.lockb')) || existsSync(join(cwd, 'bun.lock'))
+			? 'bun add -d'
+			: 'npm i -D';
+
 console.log('\nhighseam scaffolded.\n');
 if (created.length) console.log('  created:\n' + created.map((f) => `    + ${f}`).join('\n'));
+if (updated.length) console.log('  wired:\n' + updated.map((f) => `    ~ ${f}`).join('\n'));
 if (skipped.length) console.log('  skipped (already exist):\n' + skipped.map((f) => `    = ${f}`).join('\n'));
-console.log(`
-Next steps:
-  1. Import the admin theme once in your root layout:
-       import '../highseam.css';   // requires Tailwind v4 (@tailwindcss/vite)
-  2. npm run dev → open /admin and create the first user.
-  3. Define your collections in src/cms.config.ts.
 
+const steps = [];
+if (missingDeps.length) steps.push(`REQUIRED — install Tailwind v4 (the admin needs it):\n       ${pm} ${missingDeps.join(' ')}`);
+for (const m of manual) steps.push(`REQUIRED — ${m}`);
+steps.push('npm run dev → open /admin and create the first user (they become admin).');
+steps.push('Shape your content in src/cms.config.ts — collections there get a database,\n     REST + GraphQL APIs, and admin UI automatically. Your own routes are untouched;\n     the CMS lives under /admin and /api.');
+
+console.log('\nNext steps:');
+steps.forEach((s, i) => console.log(`  ${i + 1}. ${s}`));
+console.log(`
 Production (Cloudflare): bind D1 as DB, R2 as BUCKET, set CMS_SECRET.
+Docs: https://github.com/inkovic/highseam#readme
 `);

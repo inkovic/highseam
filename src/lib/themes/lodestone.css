@@ -1,0 +1,49 @@
+/**
+ * lodestone — highseam's original theme, and the built-in default.
+ *
+ * A lode is a seam of ore; a lodestone is the naturally magnetic stone miners
+ * navigated by. Dark shell, dark canvas, one vein of ore-bright green.
+ * (Its ancestry is the config-driven CMS admin it grew up alongside — this
+ * file is the homage, formalized.)
+ *
+ * A highseam theme is just this: a set of CSS custom properties. To use one,
+ * import it AFTER highseam.css; to make your own, copy this file and change
+ * values. Everything the admin draws reads from these tokens.
+ *
+ *   import '../highseam.css';
+ *   import 'highseam/themes/lodestone.css';   // explicit default (a no-op)
+ *
+ * These values mirror the built-in defaults, so importing lodestone is
+ * declarative rather than functional — it exists as the canonical, documented
+ * reference for what a theme file is.
+ */
+[data-hs-theme],
+:root {
+	/* shell */
+	--color-bg: #0b0c0e;
+	--color-elevate: #141518;
+	--color-elevate-2: #1d1f23;
+	--color-border: #2c2e33;
+
+	/* text */
+	--color-fg: #e8e9eb;
+	--color-muted: #8e9095;
+
+	/* the vein */
+	--color-primary: #c5f74f;
+	--color-primary-fg: #101203;
+
+	/* signals */
+	--color-danger: #ef4444;
+	--color-success: #34d399;
+
+	/* the writing surface — its own token so it can diverge from the shell
+	   (set it to white for a paper canvas in a dark admin) */
+	--hs-canvas: var(--color-elevate);
+	--hs-canvas-fg: var(--color-fg);
+
+	/* shape + type */
+	--radius: 0.5rem;
+	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
