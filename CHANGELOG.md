@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.0 — 2026-08-05
+
+Media provenance + import — designed against a real 8.4k-image mirror
+pipeline rather than guessed.
+
+- **`cms.importMedia()` + `POST /api/<collection>/import`.** Create-or-update
+  keyed on importer-declared identity (`source.externalKey` by default —
+  never URL equality, because signed origin URLs rot and re-mint differently
+  for the same photo). JSON batches (≤50/call, per-item outcomes
+  created/updated/unchanged/error + summary) for paced, resumable, idempotent
+  runs; multipart mode for bytes+provenance in one call.
+- **Adopt-in-place.** `storageKey` can reference an object that already
+  exists in storage: a corpus backfill creates documents without moving a
+  byte. Adopted keys are importer-owned — highseam never auto-deletes them
+  (`_adopted` marker; replacing bytes through the CMS clears it).
+- **Re-mint semantics.** Same `externalKey` with a new originUrl / new
+  storage key (e.g. `.jpg` → `.webp`) updates the existing doc: identity and
+  usage backlinks survive; no versions on media (replace is the point).
+- **`firstUsedIn` is history.** Importer-settable at create, never silently
+  overwritten afterwards; live usage stays computed (`findUsage`).
+- **Provenance search + panel.** `source.externalKey`, `firstUsedIn.slug`
+  and `firstUsedIn.title` join the picker's search fields when declared —
+  find an image by the venue slug you remember. Media edit pages gain a
+  "Used in N places" panel with backlinks, plus source / origin / first-used
+  provenance and an importer-owned indicator.
+- Importer timestamps: state them inside `source` (e.g. `mirroredAt`) —
+  system `createdAt` remains the import-run date by design.
+
+
+
 ## 1.0.0 — 2026-08-04 · renamed to **highseam**
 
 The project was previously published as `svelte-payload`. That name described

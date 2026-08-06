@@ -232,6 +232,52 @@
 		</div>
 	{/if}
 
+	{#if data.collection.upload}
+		{@const src = data.doc.source as Record<string, unknown> | undefined}
+		{@const first = data.doc.firstUsedIn as Record<string, unknown> | undefined}
+		<aside class="w-72 shrink-0 space-y-4">
+			<div>
+				<h2 class="mb-2 text-xs font-semibold tracking-widest text-(--color-muted) uppercase">
+					Used in {data.usage.length} place{data.usage.length === 1 ? '' : 's'}
+				</h2>
+				{#if data.usage.length === 0}
+					<p class="text-xs text-(--color-muted)">Not referenced anywhere — safe to delete.</p>
+				{:else}
+					<ul class="space-y-1.5">
+						{#each data.usage as use (use.collection + use.id + use.field)}
+							<li>
+								<a
+									href="/admin/{use.collection}/{use.id}"
+									class="block rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-1.5 text-xs hover:border-(--color-primary)"
+								>
+									<span class="font-medium">{use.title}</span>
+									<span class="text-(--color-muted)"> · {use.collection}.{use.field}</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+			{#if src || first}
+				<div class="space-y-1.5 rounded-(--radius) border border-(--color-border) bg-(--color-elevate) p-3 text-xs">
+					<p class="font-semibold tracking-widest text-(--color-muted) uppercase">Provenance</p>
+					{#if src?.kind}<p><span class="text-(--color-muted)">source:</span> {String(src.kind)}{src.via ? ` · ${String(src.via)}` : ''}</p>{/if}
+					{#if src?.externalKey}<p><span class="text-(--color-muted)">key:</span> <code class="rounded bg-(--color-elevate-2) px-1">{String(src.externalKey)}</code></p>{/if}
+					{#if src?.originUrl}<p class="truncate"><span class="text-(--color-muted)">origin:</span> <a href={String(src.originUrl)} target="_blank" rel="noopener" class="text-(--color-primary) hover:underline">{String(src.originUrl)}</a></p>{/if}
+					{#if first}
+						<p>
+							<span class="text-(--color-muted)">first used:</span>
+							<a href="/admin/{String(first.collection)}/{String(first.id)}" class="text-(--color-primary) hover:underline">
+								{String(first.title ?? first.slug ?? first.id)}
+							</a>
+						</p>
+					{/if}
+					{#if data.doc._adopted}<p class="text-(--color-muted)">file is importer-owned (never auto-deleted)</p>{/if}
+				</div>
+			{/if}
+		</aside>
+	{/if}
+
 	{#if data.collection.versioned && data.versions.length > 0}
 		<aside class="w-72 shrink-0">
 			<h2 class="mb-3 text-xs font-semibold tracking-widest text-(--color-muted) uppercase">
