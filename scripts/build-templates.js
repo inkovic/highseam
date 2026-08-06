@@ -60,7 +60,9 @@ export const handle: Handle = createCMSHandle(cmsConfig) as Handle;
 `
 );
 
-// Starter config.
+// Starter config. Every flagship feature must be REACHABLE out of the box —
+// an upload collection, drafts, blocks, and rich-text embeds — or new users
+// never discover them. Still just three collections.
 writeFileSync(
 	join(out, 'cms.config.ts'),
 	`import { defineCollection, defineConfig } from 'highseam';
@@ -76,10 +78,28 @@ const users = defineCollection({
 	fields: [{ name: 'name', type: 'text', required: true }]
 });
 
+// Upload collection: files live on disk in dev (.data/uploads) and R2 in
+// production. The metadata fields below are optional conventions — declare
+// them and they become inherited defaults (resolveMedia) and search fields
+// in the media picker.
+const media = defineCollection({
+	slug: 'media',
+	upload: { mimeTypes: ['image/', 'application/pdf'], maxFileSize: 10 * 1024 * 1024 },
+	admin: { useAsTitle: 'filename', defaultColumns: ['filename', 'alt', 'mimeType'] },
+	access: { read: () => true, create: isLoggedIn, update: isLoggedIn, delete: isLoggedIn },
+	fields: [
+		{ name: 'alt', type: 'text', admin: { description: 'Default alt text — inherited wherever this file is used' } },
+		{ name: 'caption', type: 'text' },
+		{ name: 'credit', type: 'text' },
+		{ name: 'tags', type: 'json' },
+		{ name: 'focalPoint', type: 'json', admin: { hidden: true } }
+	]
+});
+
 const pages = defineCollection({
 	slug: 'pages',
 	versions: { drafts: true },
-	admin: { useAsTitle: 'title', defaultColumns: ['title', 'slug', '_status'] },
+	admin: { useAsTitle: 'title', defaultColumns: ['title', 'slug', '_status'], groupsAs: 'tabs' },
 	access: {
 		read: ({ req }) => (req.user ? true : { _status: { equals: 'published' } }),
 		create: isLoggedIn,
@@ -89,13 +109,38 @@ const pages = defineCollection({
 	fields: [
 		{ name: 'title', type: 'text', required: true },
 		{ name: 'slug', type: 'text', required: true, unique: true },
-		{ name: 'content', type: 'richText' }
+		{ name: 'coverImage', type: 'upload', relationTo: 'media', admin: { position: 'sidebar' } },
+		{
+			// Rich text with embeds: images from the media library, links to
+			// other pages, and a typed callout component — all inside the flow.
+			name: 'content',
+			type: 'richText',
+			uploads: 'media',
+			relationships: ['pages'],
+			blocks: [
+				{
+					slug: 'callout',
+					fields: [
+						{
+							name: 'tone',
+							type: 'select',
+							defaultValue: 'info',
+							options: [
+								{ label: 'Info', value: 'info' },
+								{ label: 'Warning', value: 'warning' }
+							]
+						},
+						{ name: 'text', type: 'textarea', required: true }
+					]
+				}
+			]
+		}
 	]
 });
 
 export default defineConfig({
 	admin: { title: 'My CMS' },
-	collections: [users, pages]
+	collections: [users, pages, media]
 });
 `
 );

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.0 — 2026-08-06
+
+Out-of-the-box experience, audited cold and fixed. (First release informed by
+walking the public-registry path as a stranger rather than by a field report.)
+
+- **The quickstart no longer 500s.** Following the old init steps literally on
+  a fresh SvelteKit app crashed the entire site on first `npm run dev` —
+  Tailwind was a prerequisite hidden in a comment. `highseam-init` now wires
+  the `@tailwindcss/vite` plugin into `vite.config` and imports the theme in
+  your root layout automatically (when those files are recognizable; exact
+  manual steps otherwise), detects your package manager, and prints the one
+  REQUIRED install command as step 1 — not a footnote. Init leaves a running
+  app or says precisely why not.
+- **The starter config now shows the flagship.** It previously scaffolded
+  users + a bare pages collection — no uploads, no blocks, no embeds, so the
+  media system and block editor were invisible until you hand-wrote config.
+  The starter is still three collections, but now: a `media` upload collection
+  (with the metadata conventions pre-declared), and pages with a sidebar
+  cover image, tabbed layout, and rich text carrying image embeds, page
+  embeds, and a typed Callout block.
+- **Empty states guide instead of shrug.** A pristine dashboard shows a
+  three-step "First steps" card; unfiltered empty lists say "No pages yet —
+  create the first one" instead of the filter-implying "No documents match".
+- **The original theme has a name: `lodestone`.** A lode is a seam of ore; a
+  lodestone is the miners' compass. A highseam theme is just a CSS token
+  file — `highseam/themes/lodestone.css` ships as the canonical documented
+  reference: copy, change values, import after `highseam.css`.
+
+
+
 ## 1.1.0 — 2026-08-05
 
 Media provenance + import — designed against a real 8.4k-image mirror

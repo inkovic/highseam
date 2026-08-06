@@ -182,9 +182,12 @@ in-progress doc as you type for true live preview (Mode B) — subscribe with
 
 ## Admin: theming, tabs, filters, bulk
 
-- **Theme** — `admin.theme: 'light' | 'dark' | 'system'`. Every color is a
-  `--color-*` CSS variable a consumer can override; the editor surface is its
-  own `--hs-canvas` token.
+- **Theme** — `admin.theme: 'light' | 'dark' | 'system'`. The built-in dark
+  theme is **lodestone** (a lode is a seam of ore; a lodestone is the miners'
+  compass). A highseam theme is nothing more than a CSS token file — see
+  `highseam/themes/lodestone.css` for the canonical documented reference:
+  copy it, change values, import after `highseam.css`. Every color is a
+  `--color-*` variable; the editor surface is its own `--hs-canvas` token.
 - **Form layout** — `admin.group` on fields + `admin.groupsAs: 'tabs'`
   turns a 60-field form into tabs; `admin.position: 'sidebar'` pulls meta
   fields into a side column.
