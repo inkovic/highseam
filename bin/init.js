@@ -179,7 +179,31 @@ if (existsSync(layoutPath)) {
 	created.push('src/routes/+layout.svelte');
 }
 
-// 3. Dependencies: detect what's missing and the package manager in use.
+// 3. .gitignore: the skeleton ignores .env* but knows nothing about wrangler
+// or highseam conventions. Without these lines a consumer commits
+// .dev.vars (CMS_SECRET) and .data/ (the dev store — which contains user
+// PASSWORD HASHES and all content after the first dev session).
+const gitignorePath = join(cwd, '.gitignore');
+const ignoreEntries = ['.data', '.dev.vars*', '!.dev.vars.example'];
+const existingIgnore = existsSync(gitignorePath) ? readFileSync(gitignorePath, 'utf-8') : '';
+const missingIgnore = ignoreEntries.filter(
+	(e) => !existingIgnore.split('\n').some((l) => l.trim() === e || l.trim() === e.replace('*', ''))
+);
+if (missingIgnore.length > 0) {
+	writeFileSync(
+		gitignorePath,
+		existingIgnore.replace(/\n*$/, '\n') +
+			`\n# highseam — secrets + local dev store (contains password hashes)\n` +
+			missingIgnore.join('\n') +
+			'\n'
+	);
+	updated.push(`.gitignore (added ${missingIgnore.join(', ')})`);
+}
+
+// 4. Secrets example (real .dev.vars stays gitignored).
+copyFile(join(templates, '.dev.vars.example'), join(cwd, '.dev.vars.example'));
+
+// 5. Dependencies: detect what's missing and the package manager in use.
 const pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8'));
 const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 const missingDeps = ['tailwindcss', '@tailwindcss/vite'].filter((d) => !allDeps[d]);
