@@ -187,4 +187,14 @@ writeFileSync(
 	themeCss.replace(/(@import\s+["']tailwindcss["'];)/, `$1${sourceDirective}`)
 );
 
+// Secrets example — the real .dev.vars is gitignored by init.
+writeFileSync(
+	join(out, '.dev.vars.example'),
+	`# Copy to .dev.vars (gitignored) for wrangler preview / local Workers runtime.
+# Vite dev can use .env instead; both are read as CMS_SECRET.
+# Use a long random value in production (Pages project env var).
+CMS_SECRET=change-me-to-a-long-random-string
+`
+);
+
 console.log('templates/ built');

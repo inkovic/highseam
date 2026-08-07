@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.1 — 2026-08-07 · security-adjacent fix, upgrade recommended
+
+- **init now protects `.gitignore`.** The SvelteKit skeleton ignores `.env*`
+  but not wrangler/highseam conventions, so a consumer could commit
+  `.dev.vars` (your `CMS_SECRET`) and — worse, by default — `.data/`, the
+  local dev store, which contains **user password hashes** and all content
+  after the first dev session. `highseam-init` now appends `.data`,
+  `.dev.vars*` and `!.dev.vars.example` to `.gitignore` (idempotent), and
+  ships a `.dev.vars.example`.
+- **If you scaffolded before 1.2.1:** add those three lines to `.gitignore`
+  yourself. If a `.dev.vars` was ever committed, rotate `CMS_SECRET`
+  (invalidates sessions + preview tokens; users just log in again). If
+  `.data/` was ever pushed to a public repo, treat those user passwords as
+  compromised and scrub the history.
+
+Reported from the field by the highseam.com build. (The system works.)
+
+
+
 ## 1.2.0 — 2026-08-06
 
 Out-of-the-box experience, audited cold and fixed. (First release informed by
