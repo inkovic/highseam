@@ -304,6 +304,15 @@ const venues = defineCollection({
 
 export default defineConfig({
 	admin: { title: 'highseam' },
+	// The aspects this site's frontend renders; the media editor previews each
+	// one live as you place the focal point.
+	media: {
+		aspects: [
+			{ name: 'hero', ratio: '16:7' },
+			{ name: 'card', ratio: '3:2' },
+			{ name: 'og', ratio: '1200:630' }
+		]
+	},
 	localization: { locales: ['en', 'es'], defaultLocale: 'en' },
 	plugins: [lastModifiedBy(['posts', 'pages'])],
 	collections: [users, posts, media, categories, pages, venues],

@@ -6,6 +6,7 @@
 	 * multipart-to-the-collection-endpoint upload path used everywhere else,
 	 * so access control, mime/size limits and hooks still apply.
 	 */
+	import { focalObjectPosition } from '$lib/core/media';
 	import type { RelOption } from './server';
 
 	let {
@@ -228,7 +229,7 @@
 							>
 								<div class="flex aspect-square items-center justify-center bg-(--color-elevate-2)">
 									{#if opt.url && (opt.mimeType ?? '').startsWith('image/')}
-										<img src={opt.url} alt={opt.alt ?? opt.title} class="h-full w-full object-cover" loading="lazy" />
+										<img src={opt.url} alt={opt.alt ?? opt.title} class="h-full w-full object-cover" style="object-position: {focalObjectPosition(opt.focalPoint)};" loading="lazy" />
 									{:else}
 										<span class="text-2xl text-(--color-muted)">📄</span>
 									{/if}

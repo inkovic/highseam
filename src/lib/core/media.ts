@@ -114,3 +114,67 @@ export function focalObjectPosition(fp: FocalPoint | undefined): string {
 	if (!fp) return '50% 50%';
 	return `${Math.round(fp.x * 100)}% ${Math.round(fp.y * 100)}%`;
 }
+
+/** Parse '16:7' / '1200:630' / '3:2' into {w, h}. Returns null on garbage. */
+export function parseRatio(ratio: string): { w: number; h: number } | null {
+	const m = /^(\d+(?:\.\d+)?)\s*[:/x]\s*(\d+(?:\.\d+)?)$/.exec(ratio.trim());
+	if (!m) return null;
+	const w = Number(m[1]);
+	const h = Number(m[2]);
+	return w > 0 && h > 0 ? { w, h } : null;
+}
+
+export interface MediaSrcOptions {
+	/** Output width in px. */
+	width?: number;
+	/** Output height in px (or derive from `aspect`). */
+	height?: number;
+	/** Aspect ratio like '16:7' — with `width`, computes height and crops. */
+	aspect?: string;
+	/** 1–100. */
+	quality?: number;
+	/** Default 'auto' (webp/avif per browser). */
+	format?: 'auto' | 'webp' | 'avif' | 'json';
+	/** Extra raw cdn-cgi options, e.g. { sharpen: '1' }. */
+	extra?: Record<string, string | number>;
+}
+
+/**
+ * Build a Cloudflare Image Transformations URL for a media doc:
+ * `/cdn-cgi/image/<options>/<original-url>` — resized/cropped at the edge,
+ * gravity taken from the image's focal point, one original in R2.
+ *
+ * Requires Image Transformations enabled on the serving zone. Where it isn't
+ * (or for docs without a url), this returns the ORIGINAL url unchanged —
+ * pair with focalObjectPosition() and object-fit:cover and the hotspot still
+ * steers the crop, just client-side.
+ */
+export function mediaSrc(doc: unknown, opts: MediaSrcOptions = {}): string {
+	const d = doc as Doc | null;
+	const url = d && typeof d === 'object' && typeof d.url === 'string' ? d.url : '';
+	if (!url) return '';
+
+	let { width, height } = opts;
+	if (!height && width && opts.aspect) {
+		const r = parseRatio(opts.aspect);
+		if (r) height = Math.round((width * r.h) / r.w);
+	}
+	// Nothing to transform → original (the graceful-fallback contract).
+	if (!width && !height) return url;
+
+	const fp = normalizeFocalPoint((d as Doc).focalPoint);
+	const parts: string[] = [];
+	if (width) parts.push(`width=${Math.round(width)}`);
+	if (height) parts.push(`height=${Math.round(height)}`);
+	if (width && height) {
+		parts.push('fit=crop');
+		parts.push(fp ? `gravity=${fp.x.toFixed(3)}x${fp.y.toFixed(3)}` : 'gravity=auto');
+	} else {
+		parts.push('fit=scale-down');
+	}
+	parts.push(`format=${opts.format ?? 'auto'}`);
+	if (opts.quality) parts.push(`quality=${Math.min(Math.max(opts.quality, 1), 100)}`);
+	for (const [k, v] of Object.entries(opts.extra ?? {})) parts.push(`${k}=${v}`);
+
+	return `/cdn-cgi/image/${parts.join(',')}${url.startsWith('/') ? url : `/${url}`}`;
+}

@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page as pageState } from '$app/state';
 	import { displayValue } from '$lib/admin/client';
+	import { focalObjectPosition, normalizeFocalPoint } from '$lib/core/media';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -135,7 +136,7 @@
 				<a href="/admin/{data.collection.slug}/{doc.id}" class="block">
 					<div class="flex aspect-square items-center justify-center bg-(--color-elevate-2)">
 						{#if isImage && doc.url}
-							<img src={String(doc.url)} alt={String(doc.alt ?? doc.filename ?? '')} class="h-full w-full object-cover" loading="lazy" />
+							<img src={String(doc.url)} alt={String(doc.alt ?? doc.filename ?? '')} class="h-full w-full object-cover" style="object-position: {focalObjectPosition(normalizeFocalPoint(doc.focalPoint))};" loading="lazy" />
 						{:else}
 							<span class="text-3xl text-(--color-muted)">📄</span>
 						{/if}

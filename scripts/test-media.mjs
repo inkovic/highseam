@@ -72,5 +72,38 @@ console.log('\nfocal point');
 	check('rejects garbage', normalizeFocalPoint({ x: 'a' }), undefined);
 }
 
+console.log('\nmediaSrc (transform URLs)');
+{
+	const { mediaSrc, parseRatio } = await import('../src/lib/core/media.ts');
+	const doc = { url: '/media/k/beach.png', focalPoint: { v: 1, x: 0.3, y: 0.8 } };
+
+	check('parseRatio 16:7', parseRatio('16:7'), { w: 16, h: 7 });
+	check('parseRatio 1200:630', parseRatio('1200:630'), { w: 1200, h: 630 });
+	check('parseRatio garbage', parseRatio('wide'), null);
+
+	check(
+		'width+aspect crops with focal gravity',
+		mediaSrc(doc, { width: 800, aspect: '16:7' }),
+		'/cdn-cgi/image/width=800,height=350,fit=crop,gravity=0.300x0.800,format=auto/media/k/beach.png'
+	);
+	check(
+		'no focal → gravity=auto',
+		mediaSrc({ url: '/media/k/a.png' }, { width: 600, height: 400 }),
+		'/cdn-cgi/image/width=600,height=400,fit=crop,gravity=auto,format=auto/media/k/a.png'
+	);
+	check(
+		'width only → scale-down, no crop',
+		mediaSrc(doc, { width: 1200 }),
+		'/cdn-cgi/image/width=1200,fit=scale-down,format=auto/media/k/beach.png'
+	);
+	check('no dimensions → original url (fallback contract)', mediaSrc(doc), '/media/k/beach.png');
+	check('no url → empty string', mediaSrc({ id: 'x' }, { width: 100 }), '');
+	check(
+		'quality clamps',
+		mediaSrc(doc, { width: 100, height: 100, quality: 500 }).includes('quality=100'),
+		true
+	);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
