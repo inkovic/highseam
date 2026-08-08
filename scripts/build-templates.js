@@ -140,6 +140,15 @@ const pages = defineCollection({
 
 export default defineConfig({
 	admin: { title: 'My CMS' },
+	// The aspect ratios your frontend renders — the media editor shows a live
+	// crop preview per aspect, steered by each image's focal point. Edit or
+	// remove to match your layouts. Serve crops with mediaSrc() from 'highseam'.
+	media: {
+		aspects: [
+			{ name: 'card', ratio: '3:2' },
+			{ name: 'og', ratio: '1200:630' }
+		]
+	},
 	collections: [users, pages, media]
 });
 `

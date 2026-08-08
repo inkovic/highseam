@@ -215,6 +215,7 @@
 			action={(data.collection.drafts ? '?/publish' : '?/save') + localeSuffix}
 			draftAction={data.collection.drafts ? `?/saveDraft${localeSuffix}` : undefined}
 			autosave={data.collection.drafts}
+			mediaAspects={data.mediaAspects}
 		/>
 	</div>
 

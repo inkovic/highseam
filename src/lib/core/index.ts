@@ -14,10 +14,13 @@ export { sanitizeDocumentHtml, sanitizeNodes, extractRichTextRefs } from './rich
 export {
 	resolveMedia,
 	mediaMeta,
+	mediaSrc,
+	parseRatio,
 	focalObjectPosition,
 	normalizeFocalPoint,
 	MEDIA_META_FIELDS,
 	type MediaMeta,
+	type MediaSrcOptions,
 	type ResolvedMedia,
 	type FocalPoint
 } from './media';

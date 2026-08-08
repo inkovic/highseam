@@ -11,6 +11,7 @@
 	 *    aren't preloaded are resolved via ?ids=… so chips still read nicely.
 	 */
 	import MediaPicker from './MediaPicker.svelte';
+	import { focalObjectPosition } from '$lib/core/media';
 	import type { RelOption } from './server';
 
 	let {
@@ -230,7 +231,7 @@
 			{#each selectedOptions as opt (opt.id)}
 				<span class="inline-flex items-center gap-1.5 rounded-full border border-(--color-border) bg-(--color-elevate-2) py-1 pr-1.5 pl-2.5 text-xs">
 					{#if opt.url && opt.mimeType?.startsWith('image/')}
-						<img src={opt.url} alt="" class="h-4 w-4 rounded object-cover" />
+						<img src={opt.url} alt="" class="h-4 w-4 rounded object-cover" style="object-position: {focalObjectPosition(opt.focalPoint)};" />
 					{/if}
 					{opt.title}
 					{#if !readOnly}
@@ -286,7 +287,7 @@
 							class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-(--color-elevate-2)"
 						>
 							{#if opt.url && opt.mimeType?.startsWith('image/')}
-								<img src={opt.url} alt="" class="h-5 w-5 rounded object-cover" />
+								<img src={opt.url} alt="" class="h-5 w-5 rounded object-cover" style="object-position: {focalObjectPosition(opt.focalPoint)};" />
 							{/if}
 							{opt.title}
 						</button>

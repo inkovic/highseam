@@ -3,6 +3,7 @@
 	import { beforeNavigate } from '$app/navigation';
 	import BlocksInput from './BlocksInput.svelte';
 	import FieldInput from './FieldInput.svelte';
+	import FocalPicker from './FocalPicker.svelte';
 	import HtmlInput from './HtmlInput.svelte';
 	import RichTextInput from './RichTextInput.svelte';
 	import type { ClientCollection } from './client';
@@ -18,7 +19,8 @@
 		action = '',
 		draftAction = undefined,
 		draftLabel = 'Save draft',
-		autosave = false
+		autosave = false,
+		mediaAspects = []
 	}: {
 		collection: ClientCollection;
 		values?: Record<string, unknown>;
@@ -32,7 +34,11 @@
 		draftLabel?: string;
 		/** Debounced background draft saves while editing (needs draftAction). */
 		autosave?: boolean;
+		/** Registered aspect ratios (cms.config → media.aspects) for the hotspot previews. */
+		mediaAspects?: { name: string; ratio: string }[];
 	} = $props();
+
+	const hasFocalField = $derived(collection.fields.some((f) => f.name === 'focalPoint'));
 
 	let formEl: HTMLFormElement | undefined = $state();
 	let autosaveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -193,11 +199,22 @@
 		<div class="space-y-2">
 			{#if typeof values.url === 'string'}
 				{#if String(values.mimeType ?? '').startsWith('image/')}
-					<img
-						src={values.url}
-						alt={String(values.filename ?? 'upload')}
-						class="max-h-56 rounded-(--radius) border border-(--color-border)"
-					/>
+					{#if hasFocalField}
+						<!-- The hotspot IS the image preview: click the subject that
+						     must survive every crop; registered aspects preview live. -->
+						<FocalPicker
+							url={values.url}
+							alt={String(values.filename ?? 'upload')}
+							value={values.focalPoint}
+							aspects={mediaAspects}
+						/>
+					{:else}
+						<img
+							src={values.url}
+							alt={String(values.filename ?? 'upload')}
+							class="max-h-56 rounded-(--radius) border border-(--color-border)"
+						/>
+					{/if}
 				{/if}
 				<p class="text-xs text-(--color-muted)">
 					{values.filename} · {values.mimeType} · {Math.round(Number(values.filesize ?? 0) / 1024)} KB

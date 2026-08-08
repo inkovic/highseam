@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.0 — 2026-08-08
+
+The media editor round, driven by a production field report: one original in
+storage, art direction by focal point, zero variant uploads.
+
+- **Focal-point picker.** Upload docs that declare a `focalPoint` field (json)
+  now get a hotspot editor in place of the plain image preview — click or drag
+  to place the point, Clear to remove. Writes through the normal form
+  pipeline, so dirty tracking, autosave-draft, and Cmd-S all behave.
+- **Aspect registry + live previews.** Declare the ratios your frontend
+  actually renders in `media.aspects` (config), e.g.
+  `{ name: 'card', ratio: '3:2' }`. The editor shows a live crop preview per
+  aspect, steered by the focal point, so editors see every crop the moment
+  they place the point. No registry → picker still works, no strips.
+- **`mediaSrc(doc, { width, aspect | height, quality })`** builds Cloudflare
+  Image Resizing URLs (`/cdn-cgi/image/…`) with `gravity` from the stored
+  focal point. No dimensions → returns the original URL unchanged, so it's
+  safe to adopt everywhere before enabling resizing on your zone. Plus
+  `parseRatio()`, both exported from `highseam`.
+- **Thumbnails honor the focal point everywhere** — admin gallery grid, the
+  media picker modal, and relation-picker chips all crop toward the hotspot
+  (`focalPoint` now surfaces on the options endpoint / `RelOption`).
+- **Fixed: `highseam/themes/*.css` and `highseam/assets/*` imports.** The
+  exports map rewrote every subpath to `dist/*.js`, breaking
+  `highseam/themes/lodestone.css` and `highseam/assets/favicon.svg` for
+  consumers. Non-JS assets now pass through untouched.
+- README gotcha for harmless `UNRESOLVED_IMPORT` dep-scan noise on `$app/*`
+  imports (silence with `optimizeDeps: { exclude: ['highseam'] }`).
+- Starter config now ships a two-aspect registry as a worked example.
+
+Deliberately not shipped: manual per-aspect crop rectangles. The hotspot
+covers the aspect-cropping cases we have field evidence for; rects add a
+storage schema and a four-handle UI we'd be guessing at. Send evidence.
+
 ## 1.2.1 — 2026-08-07 · security-adjacent fix, upgrade recommended
 
 - **init now protects `.gitignore`.** The SvelteKit skeleton ignores `.env*`

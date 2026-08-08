@@ -14,6 +14,7 @@ export interface RelOption {
 	caption?: string;
 	credit?: string;
 	tags?: string[];
+	focalPoint?: import('$lib/core/media').FocalPoint;
 }
 
 /** Collect every collection slug referenced by relationship fields, recursively. */

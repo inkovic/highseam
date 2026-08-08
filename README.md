@@ -47,7 +47,12 @@ Everything is driven by your `src/cms.config.ts`.
 - **Bump the tarball filename each release** (`highseam-0.4.0.tgz`, …).
   In-place `file:` tarball swaps under the same name trip pnpm's lockfile
   integrity check.
-- Engine updates arrive via `npm i <new tarball>`; scaffolded stubs are
+- **Dep-scan warnings on install:** some bundlers' dependency scanners log
+  `UNRESOLVED_IMPORT` for `$app/*` imports inside highseam's packaged admin
+  components. Cosmetic — SvelteKit resolves those aliases at build time and
+  builds pass. Silence it with `optimizeDeps: { exclude: ['highseam'] }` in
+  vite config if it bothers you.
+- Engine updates arrive via `npm i highseam@<version>`; scaffolded stubs are
   yours and don't auto-update (see CHANGELOG for stub-affecting releases).
 
 ## Quick start (this repo — the demo app)

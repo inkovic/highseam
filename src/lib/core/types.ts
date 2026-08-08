@@ -497,6 +497,15 @@ export interface CMSConfig {
 		/** Admin color scheme. Default 'system'. */
 		theme?: 'light' | 'dark' | 'system';
 	};
+	media?: {
+		/**
+		 * The aspect ratios your frontend actually renders (e.g. detail hero
+		 * 16:7, card 3:2, OG 1200:630). The media editor shows a live crop
+		 * preview per aspect, driven by the image's focal point — one
+		 * original in storage, zero variant uploads.
+		 */
+		aspects?: { name: string; ratio: string }[];
+	};
 }
 
 export class APIError extends Error {
