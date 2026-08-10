@@ -49,11 +49,11 @@
 						     aspect, cropped toward the doc's focal point. -->
 						<img
 							src={String(media.url)}
-							alt={String(media.alt ?? media.filename ?? '')}
+							alt={String(media.alt ?? '')}
 							style="aspect-ratio: {ratio.w} / {ratio.h}; width: 100%; object-fit: cover; object-position: {focalObjectPosition(normalizeFocalPoint(media.focalPoint))};"
 						/>
 					{:else}
-						<img src={String(media.url)} alt={String(media.alt ?? media.filename ?? '')} />
+						<img src={String(media.url)} alt={String(media.alt ?? '')} />
 					{/if}
 					{#if media.alt}<figcaption>{media.alt}</figcaption>{/if}
 				</figure>

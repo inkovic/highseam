@@ -12,7 +12,7 @@
 	 */
 	import MediaPicker from './MediaPicker.svelte';
 	import MediaEditModal from './MediaEditModal.svelte';
-	import { focalObjectPosition } from '$lib/core/media';
+	import { focalObjectPosition, parseRatio } from '$lib/core/media';
 	import type { RelOption } from './server';
 
 	let {
@@ -28,7 +28,8 @@
 		submitHidden = true,
 		onChange = undefined,
 		editable = false,
-		mediaAspects = []
+		mediaAspects = [],
+		previewAspect = undefined
 	}: {
 		name: string;
 		options: RelOption[];
@@ -53,6 +54,10 @@
 		editable?: boolean;
 		/** Aspect registry, passed through to the edit modal's preview strips. */
 		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
+		/** Per-placement aspect (a rich-text node's fields.aspect): the preview
+		 *  thumbnail renders the crop the reader will get, not the natural
+		 *  image — same three properties the renderer emits. */
+		previewAspect?: string;
 	} = $props();
 
 	function idOf(v: unknown): string {
@@ -146,6 +151,7 @@
 	const singleImage = $derived(
 		single && single.url && single.mimeType?.startsWith('image/') ? single : null
 	);
+	const previewRatio = $derived(previewAspect ? parseRatio(previewAspect) : null);
 
 	/** After an in-context edit, refresh this picker's copy of the doc. */
 	function onMediaSaved(doc: Record<string, unknown>) {
@@ -259,7 +265,7 @@
 				src={singleImage.url}
 				alt={singleImage.alt ?? singleImage.title}
 				class="block h-36 w-auto max-w-full object-cover"
-				style="object-position: {focalObjectPosition(singleImage.focalPoint)};"
+				style="object-position: {focalObjectPosition(singleImage.focalPoint)};{previewRatio ? ` aspect-ratio: ${previewRatio.w} / ${previewRatio.h};` : ''}"
 			/>
 			<p class="truncate bg-(--color-elevate-2) px-2 py-1 text-[11px] text-(--color-muted)" title={singleImage.title}>
 				{singleImage.title}
