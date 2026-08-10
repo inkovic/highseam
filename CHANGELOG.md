@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.5.0 — 2026-08-10
+
+Media round 3, from a real editing session: in-context editing, honest
+previews, per-placement presentation. The organizing principle stays clean —
+the media doc is identity (bytes, focal point, metadata defaults); a
+placement is presentation (how this one use renders).
+
+- **In-context media editing.** Every image chip — upload fields and
+  rich-text upload nodes — gets ✎ Edit…, opening the media doc's edit
+  surface (focal point, aspect previews, alt/caption/credit/tags) in a modal
+  over the doc you're editing. Fields come from the collection's own schema
+  rendered with the same FieldInput as the full page — one editing surface,
+  not a second, lesser form. Saves PATCH through the public API (access,
+  hooks, validation all apply). The host form is untouched: modal inputs are
+  namespaced so a host save can never pick them up (both venue and media
+  declaring `tags` was live ammunition), input events stop at the modal
+  boundary so host dirty-tracking never fires, and Cmd-S inside the modal
+  saves the modal, not the doc under it. `→ media` full-page deep link stays.
+- **Honest previews.** A selected image on an upload field now renders as an
+  actual thumbnail (focal-aware, like every thumb since 1.3.0), not a
+  filename pill — an editor placing photography sees the photograph. Full
+  size is one click away (lightbox in the edit modal).
+- **Per-placement aspect on rich-text upload nodes.** `fields.aspect` (ratio
+  string; absent = natural — fully non-breaking) with a small select on the
+  node card. The sanitizer whitelists it: parseable ratios only, everything
+  else on `fields` is dropped. `RichTextRenderer` renders aspected uses with
+  `aspect-ratio` + `object-fit: cover` steered by the doc's focal point;
+  custom renderers should do the same.
+- **One registry, scoped.** Placement vocabulary comes from the same
+  `media.aspects` registry, via optional
+  `contexts: ('preview' | 'placement')[]` per entry (absent = both). Crop
+  strips and placement selects filter accordingly; the node stores the ratio
+  string, so config choices stay reversible.
+
+Deferred, on purpose: editing from inside the MediaPicker grid (modal-in-modal;
+the chip covers the flow that had evidence) and placement aspect on upload
+*fields* (their rendering is consumer layout; no field report yet).
+
+**Stub changes** (run `npx highseam-init --check-stubs` after upgrading):
+
+- `src/routes/api/[collection]/options/+server.ts` — `?schema=1` mode
+  returning the collection's client field definitions (auth-gated). Without
+  it, the edit modal opens with the image and focal picker but no metadata
+  fields.
+
 ## 1.4.0 — 2026-08-08
 
 Stub drift made detectable. 1.3.0 half-landed on its only production consumer:

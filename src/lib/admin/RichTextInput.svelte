@@ -20,11 +20,15 @@
 	let {
 		field,
 		value = undefined,
-		relOptions = {}
+		relOptions = {},
+		mediaAspects = []
 	}: {
 		field: ClientField;
 		value?: unknown;
 		relOptions?: Record<string, RelOption[]>;
+		/** Aspect registry — placement vocabulary for upload nodes + the
+		 *  in-context media edit modal. */
+		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
 	} = $props();
 
 	function key(): string {
@@ -343,6 +347,11 @@
 	const blockTypes: ClientBlock[] = field.blocks ?? [];
 	// svelte-ignore state_referenced_locally
 	const uploadsSlug = field.uploads;
+	// Per-placement aspect vocabulary: registry entries scoped to 'placement'
+	// (or unscoped). 'Natural' is always present — it's the absent value.
+	const placementAspects = $derived(
+		mediaAspects.filter((a) => !a.contexts || a.contexts.includes('placement'))
+	);
 	// svelte-ignore state_referenced_locally
 	const relationSlugs = field.relationships ?? [];
 
@@ -531,7 +540,29 @@
 						<div class="px-3 py-3"><hr class="border-(--color-border)" /></div>
 					{:else if node.type === 'upload'}
 						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
-							<span class="mb-1 block text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Image</span>
+							<div class="mb-1 flex items-center gap-3">
+								<span class="text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Image</span>
+								{#if node.value && placementAspects.length > 0}
+									<!-- Per-placement presentation: this use of the image, not
+									     the image itself. Absent = natural aspect. -->
+									<label class="ml-auto flex items-center gap-1.5 text-[11px] text-(--color-muted)">
+										aspect
+										<select
+											class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-1.5 py-0.5 text-[11px] text-(--color-fg) focus:border-(--color-primary) focus:outline-none"
+											value={node.fields?.aspect ?? ''}
+											onchange={(e) => {
+												const v = e.currentTarget.value;
+												node.fields = v ? { aspect: v } : undefined;
+											}}
+										>
+											<option value="">natural</option>
+											{#each placementAspects as a (a.name)}
+												<option value={a.ratio}>{a.name} · {a.ratio}</option>
+											{/each}
+										</select>
+									</label>
+								{/if}
+							</div>
 							<div class="max-w-sm">
 								<RelationPicker
 									name="_rt_upload"
@@ -542,6 +573,8 @@
 									uploadUrl="/api/{node.relationTo}"
 									submitHidden={false}
 									onChange={(ids) => (node.value = ids[0] ?? '')}
+									editable={true}
+									{mediaAspects}
 								/>
 							</div>
 						</div>

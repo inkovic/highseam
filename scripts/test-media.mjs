@@ -105,5 +105,37 @@ console.log('\nmediaSrc (transform URLs)');
 	);
 }
 
+console.log('\nupload-node placement aspect (sanitizer whitelist)');
+{
+	const { sanitizeNodes } = await import('../src/lib/core/richtext.ts');
+	const clean = (n) => sanitizeNodes([n])[0];
+
+	check(
+		'valid aspect kept',
+		clean({ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: '16:9' } }),
+		{ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: '16:9' } }
+	);
+	check(
+		'invalid aspect dropped',
+		clean({ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: 'wide' } }),
+		{ type: 'upload', relationTo: 'media', value: 'm1' }
+	);
+	check(
+		'junk fields dropped, aspect survives',
+		clean({ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: '4:3', evil: '<script>' } }),
+		{ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: '4:3' } }
+	);
+	check(
+		'non-string aspect dropped',
+		clean({ type: 'upload', relationTo: 'media', value: 'm1', fields: { aspect: 42 } }),
+		{ type: 'upload', relationTo: 'media', value: 'm1' }
+	);
+	check(
+		'no fields at all — unchanged shape',
+		clean({ type: 'upload', relationTo: 'media', value: 'm1' }),
+		{ type: 'upload', relationTo: 'media', value: 'm1' }
+	);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

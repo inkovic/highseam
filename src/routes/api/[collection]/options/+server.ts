@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { handleREST } from '$lib/server/rest';
 import { mediaMeta } from '$lib/core/media';
-import type { Doc, Where } from '$lib/core/types';
+import { toClientCollection } from '$lib/admin/client';
+import { APIError, type Doc, type Where } from '$lib/core/types';
 
 /**
  * Option source for the relationship / upload pickers. Modes:
@@ -27,6 +28,14 @@ export const GET: RequestHandler = ({ locals, params, url }) =>
 		const req = { user: locals.user };
 		const titleKey = col.admin?.useAsTitle ?? (col.auth ? 'email' : 'id');
 		const isUpload = Boolean(cms.uploadConfig(col));
+
+		// ?schema=1 — the collection's client field definitions, for the
+		// in-context media edit modal (which decides client-side what's
+		// editable). Requires a logged-in user: schema is admin surface.
+		if (url.searchParams.get('schema') === '1') {
+			if (!locals.user) throw new APIError('Unauthorized', 401);
+			return json({ fields: toClientCollection(col).fields, upload: isUpload });
+		}
 
 		const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '20', 10) || 20, 100);
 		const page = Math.max(parseInt(url.searchParams.get('page') ?? '1', 10) || 1, 1);

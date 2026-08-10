@@ -8,6 +8,17 @@
  */
 import type { BlockConfig, RichTextField } from './types';
 
+/**
+ * Mirrors core/media parseRatio's grammar ('16:9', '4/3', '1200x630').
+ * Inlined so this module stays free of runtime imports (it runs standalone
+ * on Node and Workers).
+ */
+const RATIO_RE = /^(\d+(?:\.\d+)?)\s*[:/x]\s*(\d+(?:\.\d+)?)$/;
+function isRatio(s: string): boolean {
+	const m = RATIO_RE.exec(s.trim());
+	return m !== null && Number(m[1]) > 0 && Number(m[2]) > 0;
+}
+
 export type RichTextNode =
 	| { type: 'p'; html: string }
 	| { type: 'h2'; html: string }
@@ -17,7 +28,17 @@ export type RichTextNode =
 	| { type: 'ol'; items: string[] }
 	| { type: 'code'; code: string }
 	| { type: 'divider' }
-	| { type: 'upload'; relationTo: string; value: string }
+	| {
+			type: 'upload';
+			relationTo: string;
+			value: string;
+			/**
+			 * Per-placement presentation, not identity. `aspect` is a ratio
+			 * string ('16:9'); absent = render at natural aspect. The media
+			 * doc keeps the focal point; the renderer crops this USE of it.
+			 */
+			fields?: { aspect?: string };
+	  }
 	| { type: 'relationship'; relationTo: string; value: string }
 	| { type: 'block'; blockType: string; fields: Record<string, unknown> };
 
@@ -175,7 +196,17 @@ export function sanitizeNodes(value: unknown): RichTextNode[] {
 			case 'divider':
 				out.push({ type: 'divider' });
 				break;
-			case 'upload':
+			case 'upload': {
+				if (typeof node.value === 'string' && typeof node.relationTo === 'string') {
+					const clean: Extract<RichTextNode, { type: 'upload' }> = { type: 'upload', relationTo: node.relationTo, value: node.value };
+					// Presentation whitelist: keep fields.aspect only if it's a
+					// parseable ratio. Everything else on `fields` is dropped.
+					const aspect = (node.fields as Record<string, unknown> | undefined)?.aspect;
+					if (typeof aspect === 'string' && isRatio(aspect)) clean.fields = { aspect };
+					out.push(clean);
+				}
+				break;
+			}
 			case 'relationship':
 				if (typeof node.value === 'string' && typeof node.relationTo === 'string') {
 					out.push({ type: node.type, relationTo: node.relationTo, value: node.value });
