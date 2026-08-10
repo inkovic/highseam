@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.0 — 2026-08-08
+
+Stub drift made detectable. 1.3.0 half-landed on its only production consumer:
+the focal picker worked, but the aspect previews never appeared, because the
+consumer's admin route stub predated the release and never passed
+`mediaAspects` through. No error anywhere — config valid, install correct,
+deploy green. Stubs are consumer-owned on purpose (that's what makes them
+customisable); the gap was that drift was invisible.
+
+- **`npx highseam-init --check-stubs`** diffs every consumer stub against the
+  installed templates and reports, per file, the template lines your copy is
+  missing. Your own customisations are never flagged — only absences. Exits
+  non-zero on drift, so it can gate a deploy or run in CI after every
+  `npm i highseam@latest`.
+- **Dev-mode drift warning in the editor.** When a collection declares a
+  `focalPoint` field but the admin route never passed `mediaAspects` (the
+  prop is `undefined`, not `[]`), DocForm now `console.warn`s in dev with the
+  exact stub, the exact line to add, and the `--check-stubs` pointer. Silent
+  half-features are the worst kind of broken.
+- **Changelog convention, starting retroactively with 1.3.0:** any release
+  that touches a template stub names the file(s) under a "Stub changes"
+  heading. If you scaffolded before that release, run `--check-stubs`.
+
+Stub changes: none. (Both fixes live in the packaged library and CLI.)
+
 ## 1.3.0 — 2026-08-08
 
 The media editor round, driven by a production field report: one original in
@@ -33,6 +58,16 @@ storage, art direction by focal point, zero variant uploads.
 Deliberately not shipped: manual per-aspect crop rectangles. The hotspot
 covers the aspect-cropping cases we have field evidence for; rects add a
 storage schema and a four-handle UI we'd be guessing at. Send evidence.
+
+**Stub changes** (added retroactively — run `npx highseam-init --check-stubs`
+if you scaffolded before 1.3.0):
+
+- `src/routes/admin/[collection]/[id]/+page.server.ts` — load() now returns
+  `mediaAspects: cms.config.media?.aspects ?? []`.
+- `src/routes/admin/[collection]/[id]/+page.svelte` — passes
+  `mediaAspects={data.mediaAspects}` to `<DocForm>`.
+- Starter `cms.config.ts` gained a `media.aspects` example (starter, not a
+  stub — existing configs are unaffected).
 
 ## 1.2.1 — 2026-08-07 · security-adjacent fix, upgrade recommended
 

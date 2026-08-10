@@ -20,7 +20,7 @@
 		draftAction = undefined,
 		draftLabel = 'Save draft',
 		autosave = false,
-		mediaAspects = []
+		mediaAspects = undefined
 	}: {
 		collection: ClientCollection;
 		values?: Record<string, unknown>;
@@ -39,6 +39,23 @@
 	} = $props();
 
 	const hasFocalField = $derived(collection.fields.some((f) => f.name === 'focalPoint'));
+
+	// Stub-drift detection. Route stubs are consumer-owned copies, so a release
+	// that adds a field to a stub's load() silently half-disables itself on
+	// existing installs — deploys succeed, svelte-check passes, the feature
+	// just isn't wired. `undefined` here is the certain signal: the admin route
+	// never passed the prop, i.e. the stub predates 1.3.0. (`[]` means the
+	// stub is current and no aspects are registered — that's fine and silent.)
+	$effect(() => {
+		if (import.meta.env.DEV && hasFocalField && mediaAspects === undefined) {
+			console.warn(
+				'[highseam] This collection declares a focalPoint field, but the admin route did not pass `mediaAspects` — ' +
+					'your src/routes/admin/[collection]/[id]/ stubs predate highseam 1.3.0, so aspect previews are disabled. ' +
+					'Add `mediaAspects: cms.config.media?.aspects ?? []` to the +page.server.ts load and pass ' +
+					'`mediaAspects={data.mediaAspects}` to <DocForm>. Find all drift with: npx highseam-init --check-stubs'
+			);
+		}
+	});
 
 	let formEl: HTMLFormElement | undefined = $state();
 	let autosaveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -206,7 +223,7 @@
 							url={values.url}
 							alt={String(values.filename ?? 'upload')}
 							value={values.focalPoint}
-							aspects={mediaAspects}
+							aspects={mediaAspects ?? []}
 						/>
 					{:else}
 						<img

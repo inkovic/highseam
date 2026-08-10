@@ -53,7 +53,11 @@ Everything is driven by your `src/cms.config.ts`.
   builds pass. Silence it with `optimizeDeps: { exclude: ['highseam'] }` in
   vite config if it bothers you.
 - Engine updates arrive via `npm i highseam@<version>`; scaffolded stubs are
-  yours and don't auto-update (see CHANGELOG for stub-affecting releases).
+  yours and don't auto-update. After upgrading, run
+  `npx highseam-init --check-stubs` — it reports any template lines your
+  stubs are missing (your customisations are never flagged) and exits
+  non-zero, so it can gate a deploy. Releases that touch stubs name the
+  files in the CHANGELOG under "Stub changes".
 
 ## Quick start (this repo — the demo app)
 
