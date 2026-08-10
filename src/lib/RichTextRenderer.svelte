@@ -5,6 +5,7 @@
 	 * relationship ids to documents (see extractRichTextRefs).
 	 */
 	import { markdownToNodes, type RichTextNode } from '$lib/core/richtext';
+	import { focalObjectPosition, normalizeFocalPoint, parseRatio } from '$lib/core/media';
 	import type { Doc } from '$lib/core/types';
 
 	let {
@@ -40,9 +41,20 @@
 			<hr />
 		{:else if node.type === 'upload'}
 			{@const media = refs[node.value]}
+			{@const ratio = node.fields?.aspect ? parseRatio(node.fields.aspect) : null}
 			{#if media && String(media.mimeType ?? '').startsWith('image/')}
 				<figure>
-					<img src={String(media.url)} alt={String(media.alt ?? media.filename ?? '')} />
+					{#if ratio}
+						<!-- Per-placement presentation: this USE renders at the chosen
+						     aspect, cropped toward the doc's focal point. -->
+						<img
+							src={String(media.url)}
+							alt={String(media.alt ?? media.filename ?? '')}
+							style="aspect-ratio: {ratio.w} / {ratio.h}; width: 100%; object-fit: cover; object-position: {focalObjectPosition(normalizeFocalPoint(media.focalPoint))};"
+						/>
+					{:else}
+						<img src={String(media.url)} alt={String(media.alt ?? media.filename ?? '')} />
+					{/if}
 					{#if media.alt}<figcaption>{media.alt}</figcaption>{/if}
 				</figure>
 			{:else if media}

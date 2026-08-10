@@ -13,12 +13,15 @@
 		field,
 		value = undefined,
 		relOptions = {},
-		error = undefined
+		error = undefined,
+		mediaAspects = []
 	}: {
 		field: ClientField;
 		value?: unknown;
 		relOptions?: Record<string, RelOption[]>;
 		error?: string;
+		/** Aspect registry, forwarded to upload fields' in-context edit modal. */
+		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
 	} = $props();
 
 	const inputClass =
@@ -151,6 +154,8 @@
 			readOnly={field.admin.readOnly}
 			searchUrl={field.relationTo ? `/api/${field.relationTo}/options` : ''}
 			uploadUrl={field.type === 'upload' && field.relationTo ? `/api/${field.relationTo}` : ''}
+			editable={field.type === 'upload'}
+			{mediaAspects}
 		/>
 	{:else if field.type === 'array' || field.type === 'json'}
 		<textarea

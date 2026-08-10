@@ -503,8 +503,12 @@ export interface CMSConfig {
 		 * 16:7, card 3:2, OG 1200:630). The media editor shows a live crop
 		 * preview per aspect, driven by the image's focal point — one
 		 * original in storage, zero variant uploads.
+		 *
+		 * `contexts` scopes where an entry appears (default: everywhere):
+		 *  - 'preview'    the crop-preview strips in the media editor
+		 *  - 'placement'  the per-use aspect select on rich-text upload nodes
 		 */
-		aspects?: { name: string; ratio: string }[];
+		aspects?: { name: string; ratio: string; contexts?: ('preview' | 'placement')[] }[];
 	};
 }
 

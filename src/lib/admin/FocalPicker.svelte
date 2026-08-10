@@ -15,12 +15,16 @@
 		url,
 		alt = '',
 		value = undefined,
-		aspects = []
+		aspects = [],
+		name = 'focalPoint'
 	}: {
 		url: string;
 		alt?: string;
 		value?: unknown;
 		aspects?: { name: string; ratio: string }[];
+		/** Hidden-input name (namespaced by MediaEditModal to avoid colliding
+		 *  with the host form's own fields). */
+		name?: string;
 	} = $props();
 
 	// svelte-ignore state_referenced_locally — seed once from the prop
@@ -69,7 +73,7 @@
 </script>
 
 <div class="space-y-2">
-	<input type="hidden" name="focalPoint" value={serialized} bind:this={hiddenInput} />
+	<input type="hidden" {name} value={serialized} bind:this={hiddenInput} />
 
 	<div class="flex items-center justify-between">
 		<span class="text-xs font-medium tracking-wide text-(--color-muted) uppercase">

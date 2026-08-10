@@ -160,6 +160,9 @@
 		if (typeof window === 'undefined') return;
 		const onKey = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+				// A modal (media edit, media picker) owns the keyboard while open —
+				// Cmd-S there must not save the host doc underneath it.
+				if (document.querySelector('[aria-modal="true"]')) return;
 				e.preventDefault();
 				formEl?.requestSubmit();
 			}
@@ -201,13 +204,13 @@
 			<BlocksInput {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'richText'}
-			<RichTextInput {field} value={values[field.name]} {relOptions} />
+			<RichTextInput mediaAspects={mediaAspects ?? []} {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'html'}
 			<HtmlInput {field} value={values[field.name]} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else}
-			<FieldInput {field} value={values[field.name]} {relOptions} error={errors[field.name]} />
+			<FieldInput {field} mediaAspects={mediaAspects ?? []} value={values[field.name]} {relOptions} error={errors[field.name]} />
 		{/if}
 	{/snippet}
 

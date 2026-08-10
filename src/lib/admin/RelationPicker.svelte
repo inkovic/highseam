@@ -11,6 +11,7 @@
 	 *    aren't preloaded are resolved via ?ids=… so chips still read nicely.
 	 */
 	import MediaPicker from './MediaPicker.svelte';
+	import MediaEditModal from './MediaEditModal.svelte';
 	import { focalObjectPosition } from '$lib/core/media';
 	import type { RelOption } from './server';
 
@@ -25,7 +26,9 @@
 		searchUrl = '',
 		uploadUrl = '',
 		submitHidden = true,
-		onChange = undefined
+		onChange = undefined,
+		editable = false,
+		mediaAspects = []
 	}: {
 		name: string;
 		options: RelOption[];
@@ -46,6 +49,10 @@
 		/** Callback mode (e.g. inside the rich-text editor, which serializes
 		 *  to JSON): receives the selected id(s) on change. */
 		onChange?: (ids: string[]) => void;
+		/** Offer in-context editing of the selected media doc (MediaEditModal). */
+		editable?: boolean;
+		/** Aspect registry, passed through to the edit modal's preview strips. */
+		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
 	} = $props();
 
 	function idOf(v: unknown): string {
@@ -133,7 +140,25 @@
 	// Upload fields get the modal browser; ordinary relationships keep the
 	// lightweight inline typeahead, which is the right tool for a short list.
 	let browserOpen = $state(false);
+	let editingId = $state('');
 	const isMedia = $derived(Boolean(uploadUrl));
+	const single = $derived(!hasMany && selectedOptions.length === 1 ? selectedOptions[0] : null);
+	const singleImage = $derived(
+		single && single.url && single.mimeType?.startsWith('image/') ? single : null
+	);
+
+	/** After an in-context edit, refresh this picker's copy of the doc. */
+	function onMediaSaved(doc: Record<string, unknown>) {
+		const opt: RelOption = {
+			id: String(doc.id),
+			title: String(doc.filename ?? doc.id),
+			url: typeof doc.url === 'string' ? doc.url : undefined,
+			mimeType: String(doc.mimeType ?? ''),
+			alt: typeof doc.alt === 'string' ? doc.alt : undefined,
+			focalPoint: doc.focalPoint as RelOption['focalPoint']
+		};
+		extra = new Map([...extra, [opt.id, opt]]);
+	}
 
 	function applyPicked(ids: string[]) {
 		selectedIds = ids;
@@ -226,7 +251,21 @@
 		{/if}
 	{/if}
 
-	{#if selectedOptions.length > 0}
+	{#if singleImage && isMedia}
+		<!-- Honest preview: an editor placing photography needs to see the
+		     photograph, not a filename pill. Focal-aware, like every thumb. -->
+		<div class="mb-1.5 inline-block overflow-hidden rounded-(--radius) border border-(--color-border)">
+			<img
+				src={singleImage.url}
+				alt={singleImage.alt ?? singleImage.title}
+				class="block h-36 w-auto max-w-full object-cover"
+				style="object-position: {focalObjectPosition(singleImage.focalPoint)};"
+			/>
+			<p class="truncate bg-(--color-elevate-2) px-2 py-1 text-[11px] text-(--color-muted)" title={singleImage.title}>
+				{singleImage.title}
+			</p>
+		</div>
+	{:else if selectedOptions.length > 0}
 		<div class="mb-1.5 flex flex-wrap gap-1.5">
 			{#each selectedOptions as opt (opt.id)}
 				<span class="inline-flex items-center gap-1.5 rounded-full border border-(--color-border) bg-(--color-elevate-2) py-1 pr-1.5 pl-2.5 text-xs">
@@ -234,6 +273,9 @@
 						<img src={opt.url} alt="" class="h-4 w-4 rounded object-cover" style="object-position: {focalObjectPosition(opt.focalPoint)};" />
 					{/if}
 					{opt.title}
+					{#if editable && isMedia && !readOnly}
+						<button type="button" onclick={() => (editingId = opt.id)} class="text-(--color-muted) hover:text-(--color-primary)" aria-label="Edit media" title="Edit media (focal point, alt…)">✎</button>
+					{/if}
 					{#if !readOnly}
 						<button type="button" onclick={() => remove(opt.id)} class="text-(--color-muted) hover:text-(--color-danger)" aria-label="Remove">✕</button>
 					{/if}
@@ -253,6 +295,16 @@
 				{selectedIds.length ? 'Change…' : `Browse ${relationTo}…`}
 			</button>
 			{#if selectedIds.length > 0 && !hasMany}
+				{#if editable}
+					<button
+						type="button"
+						class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-xs text-(--color-fg) hover:border-(--color-primary) hover:text-(--color-primary)"
+						onclick={() => (editingId = selectedIds[0])}
+						title="Edit focal point, alt text, and metadata without leaving this doc"
+					>
+						✎ Edit…
+					</button>
+				{/if}
 				<button
 					type="button"
 					class="text-xs text-(--color-muted) hover:text-(--color-danger)"
@@ -353,5 +405,16 @@
 		{hasMany}
 		{selectedIds}
 		onPick={applyPicked}
+	/>
+{/if}
+
+{#if editable && editingId}
+	<MediaEditModal
+		open={true}
+		id={editingId}
+		{relationTo}
+		aspects={mediaAspects}
+		onSaved={onMediaSaved}
+		onclose={() => (editingId = '')}
 	/>
 {/if}
