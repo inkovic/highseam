@@ -20,11 +20,84 @@ import { fileURLToPath } from 'node:url';
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const templates = join(pkgRoot, 'templates');
+const pkgVersion = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf-8')).version;
 const cwd = process.cwd();
 
 if (!existsSync(join(cwd, 'svelte.config.js')) && !existsSync(join(cwd, 'vite.config.ts'))) {
 	console.error('✗ Run this inside a SvelteKit project (no svelte.config.js / vite.config.ts found).');
 	process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// --check-stubs: detect stub drift. Route stubs are consumer-owned copies of
+// framework surface, so a release that changes a stub silently half-disables
+// itself on existing installs — the deploy succeeds, svelte-check passes, the
+// feature just isn't wired. This reports, per stub, the template lines your
+// copy is MISSING. Your own additions/customisations are never reported —
+// they're legitimate. Exits non-zero on drift so it can gate a deploy.
+// ---------------------------------------------------------------------------
+if (process.argv.includes('--check-stubs')) {
+	// Starter files (cms.config.ts, highseam.css, app.d.ts, .dev.vars.example)
+	// are yours to diverge from and are not checked. Stubs are.
+	const stubs = [];
+	const collectStubs = (dir, rel) => {
+		for (const entry of readdirSync(dir)) {
+			const full = join(dir, entry);
+			if (statSync(full).isDirectory()) collectStubs(full, `${rel}/${entry}`);
+			else stubs.push([full, `src${rel}/${entry}`]);
+		}
+	};
+	collectStubs(join(templates, 'routes'), '/routes');
+	stubs.push([join(templates, 'hooks.server.ts'), 'src/hooks.server.ts']);
+
+	const normalize = (s) => s.trim().replace(/\s+/g, ' ');
+	// Lines too generic to mean anything on their own.
+	const NOISE = /^([{}()[\];,]|<\/?[a-z]+>?|\/\/.*|\/?\*.*|<!--.*|-->|import type .*\$types.*)$|^.{0,3}$/i;
+
+	let driftFiles = 0;
+	let missingFiles = 0;
+	for (const [tplPath, relDest] of stubs) {
+		const destPath = join(cwd, relDest);
+		if (!existsSync(destPath)) {
+			console.log(`\n  ✗ ${relDest} — stub missing entirely (added in a later release?)`);
+			missingFiles++;
+			continue;
+		}
+		const tpl = readFileSync(tplPath, 'utf-8').split('\n');
+		const consumerRaw = readFileSync(destPath, 'utf-8');
+		const consumerLines = new Set(consumerRaw.split('\n').map(normalize));
+		const consumerBlob = normalize(consumerRaw);
+
+		const missing = [];
+		for (let i = 0; i < tpl.length; i++) {
+			const n = normalize(tpl[i]);
+			if (!n || NOISE.test(n)) continue;
+			// Line-set match, then whole-file substring match so reformatting
+			// (wrapping, indentation) doesn't false-positive.
+			if (consumerLines.has(n) || consumerBlob.includes(n)) continue;
+			missing.push([i + 1, tpl[i].trim()]);
+		}
+		if (missing.length) {
+			driftFiles++;
+			console.log(`\n  ~ ${relDest} — missing ${missing.length} line(s) from the ${pkgVersion} template:`);
+			for (const [ln, text] of missing.slice(0, 20)) console.log(`      L${ln}  ${text}`);
+			if (missing.length > 20) console.log(`      … ${missing.length - 20} more`);
+		}
+	}
+
+	if (driftFiles || missingFiles) {
+		console.log(`
+Drift in ${driftFiles + missingFiles} of ${stubs.length} stub(s). "Missing" means the installed
+templates have these lines and your copy doesn't — usually a release changed
+the stub after you scaffolded. Review against node_modules/highseam/templates/
+and port what applies; if a line is absent because you customised it away,
+that's legitimate — don't blind-copy. Stub changes are listed per release in
+the CHANGELOG under "Stub changes".
+`);
+		process.exit(1);
+	}
+	console.log(`\n  ✓ All ${stubs.length} stubs contain their ${pkgVersion} template lines. No drift.\n`);
+	process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
