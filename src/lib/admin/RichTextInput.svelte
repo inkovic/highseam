@@ -575,6 +575,7 @@
 									onChange={(ids) => (node.value = ids[0] ?? '')}
 									editable={true}
 									{mediaAspects}
+									previewAspect={node.fields?.aspect}
 								/>
 							</div>
 						</div>

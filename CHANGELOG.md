@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.1 — 2026-08-10
+
+QoL, from the first production day of 1.5.0: the aspect select was the one
+control on an upload node whose effect an editor couldn't see until the page
+rendered.
+
+- **The node preview shows the crop the reader will get.** When
+  `fields.aspect` is set, the upload node's thumbnail renders with the exact
+  three properties the renderer emits — `aspect-ratio`, `object-fit: cover`,
+  focal `object-position` — and re-renders the moment you change the select.
+  Absent aspect = natural thumbnail, unchanged.
+- **`RichTextRenderer` no longer falls back to filename for `alt`.** Missing
+  alt now renders `alt=""` (decorative) instead of a screen reader announcing
+  "IMG_2041.jpg". Filename remains a fine lightbox label and a poor caption;
+  captions were already alt-only. (Adopted from the consumer's own renderer
+  fix — if yours copies the old template, take the same rule.)
+
+Stub changes: none.
+
 ## 1.5.0 — 2026-08-10
 
 Media round 3, from a real editing session: in-context editing, honest
