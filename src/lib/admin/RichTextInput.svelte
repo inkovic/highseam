@@ -627,6 +627,8 @@
 													uploadUrl={sub.type === 'upload' && sub.relationTo ? `/api/${sub.relationTo}` : ''}
 													submitHidden={false}
 													onChange={(ids) => (node.fields[sub.name] = sub.hasMany ? ids : (ids[0] ?? ''))}
+													editable={sub.type === 'upload'}
+													{mediaAspects}
 												/>
 											{:else}
 												<input id="{node._key}-{sub.name}" type="text" class={miniInput} bind:value={node.fields[sub.name] as string} />

@@ -201,7 +201,7 @@
 >
 	{#snippet fieldRow(field: (typeof collection.fields)[number])}
 		{#if field.type === 'blocks' || field.type === 'array'}
-			<BlocksInput {field} value={values[field.name]} {relOptions} />
+			<BlocksInput {field} mediaAspects={mediaAspects ?? []} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'richText'}
 			<RichTextInput mediaAspects={mediaAspects ?? []} {field} value={values[field.name]} {relOptions} />

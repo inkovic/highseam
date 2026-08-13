@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.2 — 2026-08-10
+
+- **Upload sub-fields inside blocks get ✎ Edit… too.** 1.5.0 wired in-context
+  media editing on upload fields and rich-text upload nodes but skipped
+  upload sub-fields inside `blocks`/`array` rows (and inside rich-text block
+  nodes). Now all picker surfaces offer the same edit modal. Patch-sized fix,
+  shipped ahead of the roadmap queue on purpose.
+- ROADMAP revised against the consumer pressure-test: Wave 1 resequenced
+  (repeater first — gallery's editor is repeater machinery), migration
+  standing rule (new node types accept-and-upgrade previously stored shapes),
+  X dropped from core embed resolvers into the registry (our own argument,
+  applied to our own list), upload dedupe (content hash) added to Wave 1,
+  crop rect added to Wave 3 with its evidence acknowledged, link field's
+  evidence status corrected, collection queries redesigned around a named
+  registry.
+
+Stub changes: none.
+
 ## 1.5.1 — 2026-08-10
 
 QoL, from the first production day of 1.5.0: the aspect select was the one
