@@ -1,7 +1,6 @@
 /**
- * The whole CMS is driven by this file — the highseam equivalent of
- * payload.config.ts. Collections declared here get a database presence, a
- * REST API, and an admin UI automatically.
+ * The whole CMS is driven by this file. Collections declared here get a
+ * database presence, REST + GraphQL APIs, and an admin UI automatically.
  */
 import { defineCollection, defineConfig } from '$lib/core';
 import type { AccessFn } from '$lib/core';

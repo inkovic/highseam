@@ -303,5 +303,5 @@ console.log('\nNext steps:');
 steps.forEach((s, i) => console.log(`  ${i + 1}. ${s}`));
 console.log(`
 Production (Cloudflare): bind D1 as DB, R2 as BUCKET, set CMS_SECRET.
-Docs: https://github.com/inkovic/highseam#readme
+Docs: https://highseam.com · https://github.com/inkovic/highseam
 `);
