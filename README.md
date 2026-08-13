@@ -1,27 +1,35 @@
 # highseam
 
-[Payload CMS](https://github.com/payloadcms/payload), recreated in **SvelteKit**.
+**[highseam.com](https://highseam.com)** · [npm](https://www.npmjs.com/package/highseam) · [CHANGELOG](./CHANGELOG.md) · [ROADMAP](./ROADMAP.md)
 
-Payload's admin panel is deeply React/Next.js, so this is not a literal port — it's a
-faithful recreation of Payload's *architecture*: one config file in, three things out
-(database presence, REST API, admin panel). The engine is framework-agnostic where it
-counts, so the same core runs on Node and Cloudflare Workers.
+A config-driven CMS for SvelteKit that runs at the edge and can sit on top of
+the database you already have.
 
-## Use it in your own SvelteKit app
+One `src/cms.config.ts` in, three things out: a data layer (schema-less
+documents, or column-per-field over your existing D1 tables), REST + GraphQL
+APIs, and a full admin panel. The core is framework-agnostic where it counts
+— the same engine runs on Node and Cloudflare Workers (D1 + R2), with zero
+SvelteKit imports.
 
-highseam is a package. From this repo:
+- Collections, globals, drafts + version history, scheduled publishing,
+  document locking, localization, hooks, plugins, generated TS types, and
+  access control down to query constraints.
+- Structured rich text with images, document references, and your own typed
+  components inside the flow — sanitized server-side.
+- A media library where one original is the source of truth: focal points
+  with live aspect previews, in-context editing from any image chip,
+  per-placement presentation, provenance-aware bulk imports.
+- Themes are token files (default: **lodestone**). Route stubs are yours to
+  customise; upgrades are drift-checked.
+
+## Install
+
+In any SvelteKit project:
 
 ```sh
-npm run package && npm pack        # → highseam-0.1.0.tgz
-```
-
-Then in any SvelteKit project (Tailwind v4 assumed):
-
-```sh
-npm i ../path/to/highseam-0.1.0.tgz
-npx highseam-init            # scaffolds routes, hooks, cms.config.ts, theme
-# import '../highseam.css' once in your root layout, then:
-npm run dev                        # → /admin, create the first user
+npm i highseam
+npx highseam-init      # scaffolds routes, hooks, cms.config.ts, theme
+npm run dev            # → /admin, create the first user
 ```
 
 The scaffolder copies thin route stubs (REST + GraphQL + admin + media) that
@@ -106,10 +114,11 @@ const posts = defineCollection({
 });
 ```
 
-Field types: `text`, `textarea`, `richText` (markdown-backed), `email`, `number`,
-`checkbox`, `date`, `select` (+`hasMany`), `relationship` (+`hasMany`), `array`, `json`.
+Field types: `text`, `textarea`, `email`, `number`, `checkbox`, `date`,
+`select` (+`hasMany`), `relationship` (+`hasMany`), `upload`, `richText`
+(structured nodes), `html` (sanitized), `blocks`, `array`, `json`.
 
-## REST API (Payload-style)
+## REST API
 
 ```
 GET    /api/posts?where[status][equals]=published&limit=10&page=1&sort=-createdAt&depth=1
@@ -128,7 +137,7 @@ only populated if the requester has read access to them).
 
 ## Local API
 
-Server-side, skip HTTP entirely (like Payload's Local API):
+Server-side, skip HTTP entirely:
 
 ```ts
 const posts = await locals.cms.find({ user: locals.user }, 'posts', {
@@ -258,7 +267,7 @@ anonymous consumers never see unpublished content.
 
 ## Blocks
 
-The `blocks` field is Payload's flexible layout builder: an ordered list of
+The `blocks` field is a flexible layout builder: an ordered list of
 typed sections. Declare block shapes in config; the admin renders an
 interactive editor (add / remove / reorder, per-block fields). Values store as
 `[{ blockType: 'hero', ... }, { blockType: 'quote', ... }]` — see the `pages`
@@ -272,6 +281,16 @@ and its documents carry a stored file with managed `filename`, `mimeType`,
 in **R2** in production (uncomment the bucket in `wrangler.toml`), served from
 `/media/<key>` with immutable cache headers. Reference uploads from other
 collections with the `upload` field type — they populate like relationships:
+
+One original is the source of truth. Declare a `focalPoint` field and the
+editor becomes a hotspot picker with live crop previews per registered aspect
+(`media.aspects` in config); every thumbnail crops toward the hotspot;
+`mediaSrc()` builds Cloudflare Image Resizing URLs with gravity from the
+focal point. Any image chip opens the media doc's edit surface in a modal —
+no page round trip. Rich-text placements can choose a per-use aspect without
+touching the original. Bulk imports (`cms.importMedia` /
+`POST /api/<slug>/import`) are provenance-aware: externalKey dedupe, adopted
+storage keys, per-item outcomes.
 
 ```sh
 curl -b cookies -X POST /api/media -F 'file=@photo.jpg' -F 'alt=A photo'
@@ -288,7 +307,7 @@ sidebar section, with the same field types and access control as collections.
 `npm run generate:types` (dev server running) writes `src/generated-types.ts`
 from your config — select fields become literal unions, blocks become
 discriminated unions on `blockType`, relationships/uploads become
-`string | Related`. The Payload `generate:types` experience.
+`string | Related`.
 
 ## GraphQL
 
@@ -304,7 +323,7 @@ follows your GraphQL selection set. Same access control as REST.
 
 ## Plugins
 
-Payload-style: a plugin is a config transform, applied in order by
+A plugin is a config transform, applied in order by
 `defineConfig`. See `src/lib/plugins/last-modified-by.ts` — it injects a
 read-only field plus a `beforeChange` hook into chosen collections.
 
@@ -376,20 +395,26 @@ save/publish/delete or expire on their own.
 
 ## Scope: what's in, what's not
 
-Recreated from Payload: config-driven collections, field types (including
-`blocks` and `upload`), auth collections, access control (boolean +
-query-constraint), hooks (`beforeValidate`, `beforeChange`, `afterChange`,
-`afterRead`, `beforeDelete`, `afterDelete`), unique fields, defaults,
-validation, pagination/filtering/sorting, relationship population with depth,
-**drafts & version history** (save draft / publish / unpublish / restore /
-prune), **media & uploads** (fs/R2 storage adapters, mime/size limits, file
-serving), **globals**, **generated TS types**, **GraphQL**, **plugins**,
-**API keys**, **autosave**, **localization** (per-field, locale fallback,
-locale-aware queries), **scheduled publishing**, **document locking**,
-**structured rich text with embedded components** (block editor, XSS-safe
-sanitizer, frontend renderer), first-user onboarding, REST + Local APIs,
-auto-generated admin.
+In: config-driven collections, the full field-type set (including `blocks`,
+`upload`, structured `richText`, sanitized `html`), auth collections + API
+keys, access control (boolean + query-constraint), hooks (`beforeValidate`,
+`beforeChange`, `afterChange`, `afterRead`, `beforeDelete`, `afterDelete`),
+unique fields, defaults, validation, pagination/filtering/sorting,
+relationship population with depth, **drafts & version history** (save draft
+/ publish / unpublish / restore / prune), **autosave**, **scheduled
+publishing**, **document locking**, **localization** (per-field, locale
+fallback, locale-aware queries), **media** (fs/R2 storage, focal points +
+aspect previews, in-context editing, `mediaSrc()` transforms, provenance
+imports), **globals**, **generated TS types**, **GraphQL**, **plugins**,
+first-user onboarding, REST + Local APIs, table-backed collections over
+existing D1 tables, auto-generated admin.
 
-Not recreated (yet): image resizing/focal point, jobs/queues, email flows
-(verification / forgot-password), multi-tenancy, admin i18n, collaborative
-cursors.
+Not yet (see [ROADMAP](./ROADMAP.md)): gallery + embed nodes, repeater UI for
+array fields, upload dedupe, link fields, named collection queries. Not
+planned near-term: jobs/queues, email flows (verification /
+forgot-password), multi-tenancy, admin i18n, collaborative cursors.
+
+Lineage, honestly: highseam began as a study of Payload's config-driven
+architecture and grew into its own thing — Sanity-flavoured editing, a
+Directus-flavoured bring-your-own-tables mode, and a media model of its own.
+The config surface will feel familiar to Payload users on purpose.
