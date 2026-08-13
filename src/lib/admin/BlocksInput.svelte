@@ -14,11 +14,14 @@
 	let {
 		field,
 		value = undefined,
-		relOptions = {}
+		relOptions = {},
+		mediaAspects = []
 	}: {
 		field: ClientField;
 		value?: unknown;
 		relOptions?: Record<string, RelOption[]>;
+		/** Aspect registry, forwarded to upload sub-fields' edit modal. */
+		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
 	} = $props();
 
 	// `array` fields behave like a blocks field with a single implicit block type.
@@ -140,6 +143,8 @@
 										uploadUrl={sub.type === 'upload' && sub.relationTo ? `/api/${sub.relationTo}` : ''}
 										submitHidden={false}
 										onChange={(ids) => (rows[i][sub.name] = sub.hasMany ? ids : (ids[0] ?? null))}
+										editable={sub.type === 'upload'}
+										{mediaAspects}
 									/>
 								{:else if sub.type === 'array' || sub.type === 'blocks' || sub.type === 'json'}
 									<textarea

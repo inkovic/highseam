@@ -1,6 +1,6 @@
 {
 	"name": "highseam",
-	"version": "1.5.1",
+	"version": "1.5.2",
 	"description": "A config-driven CMS for SvelteKit that runs at the edge and can sit on top of the database you already have. One config file generates the data layer, REST + GraphQL APIs, and a full admin panel. Runs on Node and Cloudflare Workers (D1 + R2).",
 	"license": "MIT",
 	"repository": {
