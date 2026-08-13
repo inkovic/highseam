@@ -69,7 +69,7 @@ const media = defineCollection({
 		{ name: 'alt', type: 'text', admin: { description: 'Default alt text — inherited wherever this image is used' } },
 		{ name: 'caption', type: 'text' },
 		{ name: 'credit', type: 'text', admin: { description: 'Attribution / photographer' } },
-		{ name: 'tags', type: 'json', admin: { description: 'Labels, e.g. ["hero","beach"]' } },
+		{ name: 'tags', type: 'json', admin: { editor: 'tags', description: 'Labels — type and press Enter' } },
 		{ name: 'focalPoint', type: 'json', admin: { hidden: true } },
 		// Provenance (importer-set via /api/media/import; searchable by
 		// externalKey and firstUsedIn slug/title).
@@ -141,6 +141,8 @@ const posts = defineCollection({
 			localized: true,
 			uploads: 'media',
 			relationships: ['posts'],
+			// Paste a YouTube/Vimeo URL into an empty paragraph → embed node.
+			embeds: true,
 			blocks: [
 				{
 					slug: 'callout',
@@ -172,6 +174,12 @@ const posts = defineCollection({
 		{ name: 'author', type: 'relationship', relationTo: 'users' },
 		{ name: 'category', type: 'relationship', relationTo: 'categories' },
 		{ name: 'coverImage', type: 'upload', relationTo: 'media' },
+		{
+			name: 'gallery',
+			type: 'gallery',
+			relationTo: 'media',
+			admin: { description: 'Ordered images with per-item alt/caption overrides' }
+		},
 		{ name: 'featured', type: 'checkbox', defaultValue: false },
 		{
 			name: 'publishAt',
@@ -306,6 +314,9 @@ export default defineConfig({
 	// The aspects this site's frontend renders; the media editor previews each
 	// one live as you place the focal point.
 	media: {
+		// Gallery layout vocabulary: placements store the NAME; your renderer
+		// owns the CSS (RichTextRenderer emits data-layout for styling hooks).
+		galleryLayouts: [{ name: 'grid' }, { name: 'strip' }],
 		aspects: [
 			{ name: 'hero', ratio: '16:7' },
 			{ name: 'card', ratio: '3:2' },

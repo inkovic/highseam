@@ -10,6 +10,9 @@
 	import { tick } from 'svelte';
 	import { htmlToNodes, markdownToNodes, pruneEmptyInline, type RichTextNode } from '$lib/core/richtext';
 	import RelationPicker from './RelationPicker.svelte';
+	import GalleryInput from './GalleryInput.svelte';
+	import EmbedInput from './EmbedInput.svelte';
+	import { matchEmbedProvider } from '$lib/core/embed';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
 
@@ -21,7 +24,8 @@
 		field,
 		value = undefined,
 		relOptions = {},
-		mediaAspects = []
+		mediaAspects = [],
+		galleryLayouts = []
 	}: {
 		field: ClientField;
 		value?: unknown;
@@ -29,6 +33,8 @@
 		/** Aspect registry — placement vocabulary for upload nodes + the
 		 *  in-context media edit modal. */
 		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
+		/** Gallery layout vocabulary (cms.config → media.galleryLayouts). */
+		galleryLayouts?: { name: string }[];
 	} = $props();
 
 	function key(): string {
@@ -333,6 +339,20 @@
 	function onPaste(e: ClipboardEvent, i: number) {
 		const plainOnly = plainPasteNext;
 		plainPasteNext = false;
+		// The QoL moment: pasting a bare provider URL into an empty paragraph
+		// becomes an embed node (when the field allows embeds).
+		if (allowEmbeds) {
+			const text = (e.clipboardData?.getData('text/plain') ?? '').trim();
+			if (text && !/\s/.test(text) && matchEmbedProvider(text)) {
+				const cur = nodes[i];
+				const curEmpty = cur && 'html' in cur && !cur.html.replace(/<br\s*\/?>|&nbsp;|\s/gi, '');
+				if (curEmpty) {
+					e.preventDefault();
+					nodes.splice(i, 1, { type: 'embed', url: text, _key: key() } as EditorNode);
+					return;
+				}
+			}
+		}
 		const parsed = clipboardToNodes(e, plainOnly);
 		if (!parsed || parsed.length === 0) return;
 		e.preventDefault();
@@ -347,6 +367,8 @@
 	const blockTypes: ClientBlock[] = field.blocks ?? [];
 	// svelte-ignore state_referenced_locally
 	const uploadsSlug = field.uploads;
+	// svelte-ignore state_referenced_locally — field config is static per instance
+	const allowEmbeds = Boolean(field.embeds);
 	// Per-placement aspect vocabulary: registry entries scoped to 'placement'
 	// (or unscoped). 'Natural' is always present — it's the absent value.
 	const placementAspects = $derived(
@@ -369,7 +391,13 @@
 		{ label: 'Code', make: () => ({ type: 'code', code: '' }) },
 		{ label: '— Divider', make: () => ({ type: 'divider' }) },
 		...(uploadsSlug
-			? [{ label: '🖼 Image', make: () => ({ type: 'upload', relationTo: uploadsSlug, value: '' }) as RichTextNode }]
+			? [
+					{ label: '🖼 Image', make: () => ({ type: 'upload', relationTo: uploadsSlug, value: '' }) as RichTextNode },
+					{ label: '🖼🖼 Gallery', make: () => ({ type: 'gallery', relationTo: uploadsSlug, items: [] }) as RichTextNode }
+				]
+			: []),
+		...(allowEmbeds
+			? [{ label: '▶ Embed', make: () => ({ type: 'embed', url: '' }) as RichTextNode }]
 			: []),
 		...relationSlugs.map((slug) => ({
 			label: `↪ ${slug}`,
@@ -538,6 +566,80 @@
 						></textarea>
 					{:else if node.type === 'divider'}
 						<div class="px-3 py-3"><hr class="border-(--color-border)" /></div>
+					{:else if node.type === 'gallery'}
+						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
+							<div class="mb-1 flex items-center gap-3">
+								<span class="text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Gallery</span>
+								{#if galleryLayouts.length > 0}
+									<label class="flex items-center gap-1.5 text-[11px] text-(--color-muted)">
+										layout
+										<select
+											class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-1.5 py-0.5 text-[11px] text-(--color-fg) focus:border-(--color-primary) focus:outline-none"
+											value={node.fields?.layout ?? ''}
+											onchange={(e) => {
+												const v = e.currentTarget.value;
+												const f = { ...(node.fields ?? {}) };
+												if (v) f.layout = v;
+												else delete f.layout;
+												node.fields = f.layout || f.aspect ? f : undefined;
+											}}
+										>
+											<option value="">default</option>
+											{#each galleryLayouts as l (l.name)}
+												<option value={l.name}>{l.name}</option>
+											{/each}
+										</select>
+									</label>
+								{/if}
+								{#if placementAspects.length > 0}
+									<label class="ml-auto flex items-center gap-1.5 text-[11px] text-(--color-muted)">
+										aspect
+										<select
+											class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-1.5 py-0.5 text-[11px] text-(--color-fg) focus:border-(--color-primary) focus:outline-none"
+											value={node.fields?.aspect ?? ''}
+											onchange={(e) => {
+												const v = e.currentTarget.value;
+												const f = { ...(node.fields ?? {}) };
+												if (v) f.aspect = v;
+												else delete f.aspect;
+												node.fields = f.layout || f.aspect ? f : undefined;
+											}}
+										>
+											<option value="">natural</option>
+											{#each placementAspects as a (a.name)}
+												<option value={a.ratio}>{a.name} · {a.ratio}</option>
+											{/each}
+										</select>
+									</label>
+								{/if}
+							</div>
+							<GalleryInput
+								name="_rt_gallery"
+								relationTo={node.relationTo}
+								value={node.items}
+								submitHidden={false}
+								onChange={(v) => (node.items = v)}
+								{mediaAspects}
+							/>
+						</div>
+					{:else if node.type === 'embed'}
+						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
+							<span class="mb-1 block text-xs font-semibold tracking-wide text-(--color-primary) uppercase">Embed</span>
+							<div class="max-w-lg">
+								<EmbedInput
+									name="_rt_embed"
+									value={node}
+									submitHidden={false}
+									onChange={(v) => {
+										node.url = v?.url ?? '';
+										node.provider = v?.provider;
+										node.embedId = v?.embedId;
+										node.title = v?.title;
+										node.thumbUrl = v?.thumbUrl;
+									}}
+								/>
+							</div>
+						</div>
 					{:else if node.type === 'upload'}
 						<div class="bg-(--color-elevate-2)/50 px-3 py-2">
 							<div class="mb-1 flex items-center gap-3">

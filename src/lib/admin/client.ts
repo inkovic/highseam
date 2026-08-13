@@ -19,6 +19,7 @@ export interface ClientField {
 		hidden?: boolean;
 		group?: string;
 		position?: 'sidebar';
+		editor?: 'tags';
 		preview?: 'image';
 	};
 	// type-specific
@@ -29,9 +30,12 @@ export interface ClientField {
 	blocks?: ClientBlock[];
 	minRows?: number;
 	maxRows?: number;
+	maxItems?: number;
 	/** richText: embeddable upload collection + relationship targets */
 	uploads?: string;
 	relationships?: string[];
+	/** richText: allow embed nodes (paste-a-URL). */
+	embeds?: boolean;
 	minLength?: number;
 	maxLength?: number;
 	min?: number;
@@ -85,7 +89,8 @@ function toClientField(f: Field): ClientField {
 			hidden: f.admin?.hidden,
 			group: f.admin?.group,
 			position: f.admin?.position,
-			preview: f.admin?.preview
+			preview: f.admin?.preview,
+			editor: f.admin?.editor
 		}
 	};
 	if (f.type === 'select') {
@@ -99,6 +104,10 @@ function toClientField(f: Field): ClientField {
 	if (f.type === 'upload') {
 		base.relationTo = f.relationTo;
 		base.hasMany = f.hasMany;
+	}
+	if (f.type === 'gallery') {
+		base.relationTo = f.relationTo;
+		base.maxItems = f.maxItems;
 	}
 	if (f.type === 'array') base.fields = f.fields.map(toClientField);
 	if (f.type === 'blocks') {
@@ -122,6 +131,7 @@ function toClientField(f: Field): ClientField {
 		}));
 		base.uploads = f.uploads;
 		base.relationships = f.relationships;
+		base.embeds = f.embeds;
 	}
 	if (f.type === 'number') {
 		base.min = f.min;

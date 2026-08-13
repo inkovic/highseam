@@ -1,5 +1,60 @@
 # Changelog
 
+## 1.6.0 — 2026-08-13 · Wave 1
+
+The enhanced-fields wave, in the consumer-pressure-tested order: repeater
+first (gallery rides it), then gallery, embed, and dedupe. Primitives, not
+elements — see ROADMAP.md for what was deliberately not built.
+
+- **The repeater.** `array` sub-fields inside blocks render as real
+  add/remove/reorder rows — recursively — instead of a JSON textarea. Rows
+  everywhere (blocks and arrays) now collapse to a one-line summary. Row
+  add/remove/move correctly mark the form dirty (they're button clicks; no
+  native input event fired before).
+- **Tags chips editor.** `json` fields that are really string lists opt in
+  with `admin: { editor: 'tags' }` — type, Enter adds, ✕ removes, Backspace
+  eats the last chip. The hand-typed-JSON-array era ends. (Old JSON-string
+  values parse on first edit.)
+- **`gallery`** — field type and rich-text node. Ordered upload refs with
+  per-item alt/caption overrides riding the `resolveMedia()` precedence;
+  identity stays on the media doc. Editor: MediaPicker multi-add, focal-aware
+  thumbs, ✎ Edit modal per item, reorder. Per-placement `layout` (from the
+  new `media.galleryLayouts` registry — the node stores the NAME, your CSS
+  owns the look; the reference renderer emits `data-layout`) and optional
+  per-placement `aspect`. Populates like relationships: items gain a `doc`
+  at depth ≥ 1. **Migration contract: bare id arrays are accepted and lifted
+  to the item shape** — existing stored galleries survive their first save.
+- **`embed`** — field type and rich-text node. Paste a URL; the server
+  resolves it at save to `{ provider, embedId, title?, thumbUrl? }` via a
+  provider registry. Core resolves **YouTube, Vimeo, and any provider you
+  register with a fixed oEmbed endpoint — nothing else**; there is no oEmbed
+  discovery on purpose (fetching arbitrary editor URLs server-side is an
+  SSRF vector; a registry of fixed hosts isn't). Third-party HTML is never
+  stored — renderers build iframes from the allowlist. Reference renderer:
+  youtube-nocookie, click-to-load facade off the resolved poster frame,
+  plain-link fallback for unresolved URLs (flagged loudly in the editor).
+  Pasting a bare provider URL into an empty rich-text paragraph becomes an
+  embed node. **Migration contract: raw URL strings lift to `{ url }`.**
+  Resolution is best-effort: no network → provider + id still fill from URL
+  parsing alone.
+- **Upload dedupe (content hash).** Uploads carry a managed `contentHash`
+  (SHA-256); identical bytes return the existing document (transient
+  `_deduped: true` flag) instead of a second doc + storage key. Applies to
+  `importMedia` too (new per-item action `'deduped'`) — but only when
+  externalKey identity found nothing, and never overwriting provenance.
+  Read access applies to the dedupe lookup, so an invisible doc can't leak
+  through a hash hit. Opt out per collection: `upload: { dedupe: false }`.
+  Table-backed upload collections need a `contentHash` column.
+
+**Stub changes** (run `npx highseam-init --check-stubs` after upgrading):
+
+- `src/routes/admin/[collection]/[id]/+page.server.ts` — load() also returns
+  `galleryLayouts: cms.config.media?.galleryLayouts ?? []`.
+- `src/routes/admin/[collection]/[id]/+page.svelte` — passes
+  `galleryLayouts={data.galleryLayouts}` to `<DocForm>`.
+- `src/routes/api/[collection]/import/+server.ts` — result type includes the
+  `'deduped'` action.
+
 ## 1.5.2 — 2026-08-10
 
 - **Upload sub-fields inside blocks get ✎ Edit… too.** 1.5.0 wired in-context

@@ -91,7 +91,7 @@ const media = defineCollection({
 		{ name: 'alt', type: 'text', admin: { description: 'Default alt text — inherited wherever this file is used' } },
 		{ name: 'caption', type: 'text' },
 		{ name: 'credit', type: 'text' },
-		{ name: 'tags', type: 'json' },
+		{ name: 'tags', type: 'json', admin: { editor: 'tags' } },
 		{ name: 'focalPoint', type: 'json', admin: { hidden: true } }
 	]
 });

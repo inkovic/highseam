@@ -48,6 +48,12 @@ function fieldType(f: Field, relNames: Map<string, string>): string {
 			const one = `string | ${relNames.get(f.relationTo) ?? 'string'}`;
 			return f.hasMany ? `(${one})[]` : one;
 		}
+		case 'embed':
+			return `{ url: string; provider?: string; embedId?: string; title?: string; thumbUrl?: string }`;
+		case 'gallery': {
+			const related = relNames.get(f.relationTo) ?? 'string';
+			return `{ id: string; alt?: string; caption?: string; doc?: ${related} }[]`;
+		}
 		case 'array': {
 			return `{\n${f.fields.map((s) => `\t\t${prop(s, relNames, 2)}`).join('\n')}\n\t}[]`;
 		}

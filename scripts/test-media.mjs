@@ -137,5 +137,69 @@ console.log('\nupload-node placement aspect (sanitizer whitelist)');
 	);
 }
 
+console.log('\ngallery node (sanitizer + upgrade path)');
+{
+	const { sanitizeNodes } = await import('../src/lib/core/richtext.ts');
+	const clean = (n) => sanitizeNodes([n])[0];
+
+	check(
+		'items kept, junk dropped, overrides preserved',
+		clean({ type: 'gallery', relationTo: 'media', items: [{ id: 'a', alt: 'x', junk: 1 }, { id: 'b', caption: 'c' }, { bad: true }], fields: { layout: 'grid', evil: 'x' } }),
+		{ type: 'gallery', relationTo: 'media', items: [{ id: 'a', alt: 'x' }, { id: 'b', caption: 'c' }], fields: { layout: 'grid' } }
+	);
+	check(
+		'bare id array lifts to item shape (migration contract)',
+		clean({ type: 'gallery', relationTo: 'media', items: ['a', 'b'] }),
+		{ type: 'gallery', relationTo: 'media', items: [{ id: 'a' }, { id: 'b' }] }
+	);
+	check(
+		'invalid layout dropped, valid aspect kept',
+		clean({ type: 'gallery', relationTo: 'media', items: ['a'], fields: { layout: 'x y!', aspect: '1:1' } }),
+		{ type: 'gallery', relationTo: 'media', items: [{ id: 'a' }], fields: { aspect: '1:1' } }
+	);
+}
+
+console.log('\nembed (provider match + sanitizer + upgrade)');
+{
+	const { matchEmbedProvider } = await import('../src/lib/core/embed.ts');
+	const { sanitizeNodes } = await import('../src/lib/core/richtext.ts');
+	const clean = (n) => sanitizeNodes([n])[0];
+
+	check('youtube watch', matchEmbedProvider('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.embedId, 'dQw4w9WgXcQ');
+	check('youtu.be short link', matchEmbedProvider('https://youtu.be/dQw4w9WgXcQ')?.embedId, 'dQw4w9WgXcQ');
+	check('youtube shorts', matchEmbedProvider('https://youtube.com/shorts/abc123xyz00')?.embedId, 'abc123xyz00');
+	check('vimeo', matchEmbedProvider('https://vimeo.com/123456789')?.provider.name, 'vimeo');
+	check('unknown host', matchEmbedProvider('https://example.com/video/1'), null);
+	check('javascript: rejected', matchEmbedProvider('javascript:alert(1)'), null);
+	check(
+		'custom provider wins',
+		matchEmbedProvider('https://maps.example.com/place/x', [{ name: 'maps', hosts: ['maps.example.com'], extractId: (u) => u.pathname }])?.provider.name,
+		'maps'
+	);
+
+	check(
+		'embed node sanitized (https thumb kept)',
+		clean({ type: 'embed', url: 'https://youtu.be/a1b2c3d4e5f', provider: 'youtube', embedId: 'a1b2c3d4e5f', title: 'T', thumbUrl: 'https://i.ytimg.com/vi/a/hq.jpg' }),
+		{ type: 'embed', url: 'https://youtu.be/a1b2c3d4e5f', provider: 'youtube', embedId: 'a1b2c3d4e5f', title: 'T', thumbUrl: 'https://i.ytimg.com/vi/a/hq.jpg' }
+	);
+	check(
+		'http thumb dropped, bad provider dropped',
+		clean({ type: 'embed', url: 'https://youtu.be/x', provider: 'y t!', thumbUrl: 'http://x.com/t.jpg' }),
+		{ type: 'embed', url: 'https://youtu.be/x' }
+	);
+	check('non-http url node dropped', clean({ type: 'embed', url: 'javascript:x' }), undefined);
+}
+
+console.log('\ncontent hash');
+{
+	const { sha256Hex } = await import('../src/lib/core/crypto.ts');
+	const bytes = new TextEncoder().encode('hello highseam');
+	const h1 = await sha256Hex(bytes);
+	const h2 = await sha256Hex(bytes);
+	check('deterministic', h1, h2);
+	check('64 hex chars', /^[0-9a-f]{64}$/.test(h1), true);
+	check('different bytes differ', (await sha256Hex(new TextEncoder().encode('x'))) === h1, false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

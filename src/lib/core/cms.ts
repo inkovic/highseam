@@ -6,7 +6,7 @@
  */
 import { matchesWhere } from './adapters/memory';
 import { extractRichTextRefs } from './richtext';
-import { hashPassword, signJWT, verifyJWT, verifyPassword } from './crypto';
+import { hashPassword, sha256Hex, signJWT, verifyJWT, verifyPassword } from './crypto';
 import type {
 	AccessArgs,
 	AccessFn,
@@ -27,6 +27,8 @@ import type {
 } from './types';
 import { APIError } from './types';
 import { applyDefaults, sanitizeData, validateData } from './validate';
+import { resolveEmbed } from './embed';
+import type { RichTextNode } from './richtext';
 
 export interface OperationOptions {
 	/** Skip access control (server-side trusted ops, seeding). */
@@ -488,7 +490,7 @@ export class CMS {
 			data?: Record<string, unknown>;
 		},
 		opts: OperationOptions = {}
-	): Promise<{ doc: Doc; action: 'created' | 'updated' | 'unchanged' }> {
+	): Promise<{ doc: Doc; action: 'created' | 'updated' | 'unchanged' | 'deduped' }> {
 		await this.init();
 		const col = this.collection(slug);
 		if (!this.uploadConfig(col)) throw new APIError(`Collection ${slug} is not an upload collection`, 400);
@@ -533,7 +535,16 @@ export class CMS {
 				const access = await this.evalAccess(col, existing ? 'update' : 'create', { req, data });
 				if (!access.allowed) throw new APIError('Forbidden', 403);
 			}
-			fileFields = await this.storeFile(col, item.file);
+			const bytes = new Uint8Array(await item.file.arrayBuffer());
+			const hash = await sha256Hex(bytes);
+			// Content dedupe only when identity (externalKey) found nothing:
+			// identity says what a thing IS; the hash only says the bytes match.
+			// Existing provenance is never overwritten by a dedupe hit.
+			if (!existing && this.uploadConfig(col)!.dedupe !== false) {
+				const byHash = await this.findByContentHash(req, slug, hash);
+				if (byHash) return { doc: this.sanitizeOutput(col, byHash), action: 'deduped' };
+			}
+			fileFields = await this.storeFile(col, item.file, { bytes, hash });
 		} else if (item.storageKey) {
 			if (item.storageKey.includes('..')) throw new APIError('Invalid storageKey', 400);
 			fileFields = {
@@ -605,7 +616,9 @@ export class CMS {
 
 		for (const col of this.config.collections) {
 			const fields = col.fields.filter(
-				(f) => (f.type === 'relationship' || f.type === 'upload') && f.relationTo === targetSlug
+				(f) =>
+					(f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
+					f.relationTo === targetSlug
 			);
 			// richText fields can embed uploads/relationships inside their nodes.
 			const richTextFields = col.fields.filter(
@@ -619,7 +632,9 @@ export class CMS {
 			for (const doc of docs) {
 				for (const f of fields) {
 					const v = doc[f.name];
-					for (const id of Array.isArray(v) ? v : [v]) {
+					for (const entry of Array.isArray(v) ? v : [v]) {
+						// gallery items are { id, ... }; relationship/upload are ids.
+						const id = typeof entry === 'object' && entry !== null ? (entry as Doc).id : entry;
 						if (typeof id === 'string' && id) referenced.add(id);
 					}
 				}
@@ -644,7 +659,9 @@ export class CMS {
 		for (const col of this.config.collections) {
 			const titleKey = col.admin?.useAsTitle ?? 'id';
 			const direct = col.fields.filter(
-				(f) => (f.type === 'relationship' || f.type === 'upload') && f.relationTo === targetSlug
+				(f) =>
+					(f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
+					f.relationTo === targetSlug
 			);
 			const rich = col.fields.filter(
 				(f) =>
@@ -658,7 +675,9 @@ export class CMS {
 				const title = String(doc[titleKey] ?? doc.id);
 				for (const f of direct) {
 					const v = doc[f.name];
-					const hit = (Array.isArray(v) ? v : [v]).some((x) => x === id);
+					const hit = (Array.isArray(v) ? v : [v]).some(
+						(x) => x === id || (typeof x === 'object' && x !== null && (x as Doc).id === id)
+					);
 					if (hit) uses.push({ collection: col.slug, id: doc.id, field: f.name, title });
 				}
 				for (const f of rich) {
@@ -689,7 +708,11 @@ export class CMS {
 	}
 
 	/** Store an uploaded file and return the managed file fields. */
-	private async storeFile(col: CollectionConfig, file: File): Promise<Record<string, unknown>> {
+	private async storeFile(
+		col: CollectionConfig,
+		file: File,
+		pre?: { bytes: Uint8Array; hash: string }
+	): Promise<Record<string, unknown>> {
 		const cfg = this.uploadConfig(col)!;
 		if (!this.storage)
 			throw new APIError(
@@ -708,15 +731,35 @@ export class CMS {
 
 		const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-120) || 'file';
 		const key = `${crypto.randomUUID()}/${safeName}`;
-		await this.storage.put(key, new Uint8Array(await file.arrayBuffer()), type);
+		const bytes = pre?.bytes ?? new Uint8Array(await file.arrayBuffer());
+		const hash = pre?.hash ?? (await sha256Hex(bytes));
+		await this.storage.put(key, bytes, type);
 
 		return {
 			filename: safeName,
 			mimeType: type,
 			filesize: file.size,
 			storageKey: key,
-			url: `/media/${key}`
+			url: `/media/${key}`,
+			// Byte identity — what the dedupe check queries.
+			contentHash: hash
 		};
+	}
+
+	/**
+	 * Content-hash dedupe: identical bytes already stored → the existing doc
+	 * (if the requester can read it), instead of a duplicate doc + key.
+	 * Read access applies on purpose — a doc the requester can't see must not
+	 * leak through a dedupe hit, so that case creates a genuine duplicate.
+	 */
+	private async findByContentHash(req: ReqContext, slug: string, hash: string): Promise<Doc | null> {
+		const { docs } = await this.find(
+			req,
+			slug,
+			{ where: { contentHash: { equals: hash } }, limit: 1 },
+			{ depth: 0 }
+		);
+		return docs[0] ?? null;
 	}
 
 	async create(
@@ -738,12 +781,19 @@ export class CMS {
 
 		if (this.uploadConfig(col)) {
 			if (!file) throw new APIError('A file is required (multipart field "file")', 400);
-			Object.assign(data, await this.storeFile(col, file));
+			const bytes = new Uint8Array(await file.arrayBuffer());
+			const hash = await sha256Hex(bytes);
+			if (this.uploadConfig(col)!.dedupe !== false) {
+				const existing = await this.findByContentHash(req, slug, hash);
+				if (existing) return { ...existing, _deduped: true };
+			}
+			Object.assign(data, await this.storeFile(col, file, { bytes, hash }));
 		}
 
 		const locale = this.resolveLocale(opts);
 
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'create', data);
+		data = await this.resolveEmbeds(col, data);
 		validateData(col, data);
 		await this.checkUnique(col, data, undefined, locale);
 
@@ -807,6 +857,7 @@ export class CMS {
 		const locale = this.resolveLocale(opts);
 
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, originalDoc);
+		data = await this.resolveEmbeds(col, data);
 		validateData(
 			col,
 			this.flattenLocalized(col, { ...stripMeta(originalDoc), ...data } as Doc, locale ?? null),
@@ -906,6 +957,7 @@ export class CMS {
 		const source = latest?.snapshot ? { ...stripMeta(latest.snapshot as Doc) } : stripMeta(doc);
 		let data: Record<string, unknown> = { ...source, _status: 'published' };
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, doc);
+		data = await this.resolveEmbeds(col, data);
 		// Stored localized values are per-locale objects; validate a flattened view.
 		validateData(col, this.flattenLocalized(col, data as Doc, this.resolveLocale({})));
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, doc);
@@ -1183,10 +1235,50 @@ export class CMS {
 	}
 
 	/** Replace relationship ids with the related documents, down to `depth`. */
+	/**
+	 * Server-side embed resolution at save: embed fields and rich-text embed
+	 * nodes that carry only a URL get provider/embedId/title/thumbUrl filled
+	 * from the registry (core: YouTube + Vimeo; config: embeds.providers).
+	 * Best-effort — unresolvable URLs stay `{ url }` and render as links.
+	 */
+	private async resolveEmbeds(
+		col: CollectionConfig,
+		data: Record<string, unknown>
+	): Promise<Record<string, unknown>> {
+		const providers = this.config.embeds?.providers ?? [];
+		const out = { ...data };
+		for (const field of col.fields) {
+			const value = out[field.name];
+			if (value == null) continue;
+			if (field.type === 'embed') {
+				const v = value as { url?: string; provider?: string };
+				if (typeof v.url === 'string' && !v.provider) {
+					const resolved = await resolveEmbed(v.url, providers);
+					if (resolved) out[field.name] = { ...v, ...resolved };
+				}
+			}
+			if (field.type === 'richText' && Array.isArray(value)) {
+				let changed = false;
+				const nodes = await Promise.all(
+					(value as RichTextNode[]).map(async (node) => {
+						if (node.type !== 'embed' || node.provider || typeof node.url !== 'string') return node;
+						const resolved = await resolveEmbed(node.url, providers);
+						if (!resolved) return node;
+						changed = true;
+						return { ...node, ...resolved };
+					})
+				);
+				if (changed) out[field.name] = nodes;
+			}
+		}
+		return out;
+	}
+
 	private async populate(req: ReqContext, col: CollectionConfig, doc: Doc, depth: number): Promise<Doc> {
 		const out = { ...doc };
 		for (const field of col.fields) {
-			if (field.type !== 'relationship' && field.type !== 'upload') continue;
+			if (field.type !== 'relationship' && field.type !== 'upload' && field.type !== 'gallery')
+				continue;
 			const value = out[field.name];
 			if (value == null) continue;
 			if (!this.hasCollection(field.relationTo)) continue;
@@ -1200,6 +1292,21 @@ export class CMS {
 					return id; // dangling or forbidden: leave the raw id
 				}
 			};
+
+			if (field.type === 'gallery') {
+				// Items keep their shape (id stays a string, overrides stay put);
+				// the populated media doc arrives as `doc` alongside them.
+				if (!Array.isArray(value)) continue;
+				out[field.name] = await Promise.all(
+					value.map(async (item) => {
+						if (typeof item !== 'object' || item === null) return item;
+						const it = item as Record<string, unknown>;
+						const related = await resolve(it.id);
+						return typeof related === 'object' ? { ...it, doc: related } : it;
+					})
+				);
+				continue;
+			}
 
 			const hasMany = Boolean(field.hasMany);
 			out[field.name] = hasMany

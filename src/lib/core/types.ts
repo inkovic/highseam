@@ -35,7 +35,9 @@ export type FieldType =
 	| 'upload'
 	| 'array'
 	| 'blocks'
-	| 'json';
+	| 'json'
+	| 'gallery'
+	| 'embed';
 
 export interface SelectOption {
 	label: string;
@@ -57,6 +59,11 @@ export interface FieldAdminConfig {
 	position?: 'sidebar';
 	/** Render hint: 'image' shows a thumbnail preview for a URL/text field. */
 	preview?: 'image';
+	/**
+	 * Editor hint for `json` fields whose value is really a string list
+	 * (tags, slugs): 'tags' renders a chips input instead of a JSON textarea.
+	 */
+	editor?: 'tags';
 }
 
 export interface BaseField {
@@ -107,6 +114,8 @@ export interface RichTextField extends BaseField {
 	uploads?: string;
 	/** Collection slugs embeddable as relationship nodes. */
 	relationships?: string[];
+	/** Allow embed nodes (paste a URL; resolved via the embeds registry). */
+	embeds?: boolean;
 }
 
 export interface NumberField extends BaseField {
@@ -144,6 +153,20 @@ export interface UploadField extends BaseField {
 	hasMany?: boolean;
 }
 
+/**
+ * An ordered list of upload references with per-item presentation overrides.
+ * Value: `[{ id, alt?, caption? }]` — overrides ride the resolveMedia()
+ * inherit-then-override precedence; identity (focal point, metadata
+ * defaults) stays on the media doc. Accepts a bare id array on write and
+ * lifts it to the item shape (the migration contract).
+ */
+export interface GalleryField extends BaseField {
+	type: 'gallery';
+	/** Upload collection the items reference. */
+	relationTo: string;
+	maxItems?: number;
+}
+
 export interface ArrayField extends BaseField {
 	type: 'array';
 	/** Sub-fields for each row. */
@@ -173,6 +196,17 @@ export interface JsonField extends BaseField {
 	type: 'json';
 }
 
+/**
+ * A URL resolved to structured embed data at save:
+ * `{ url, provider?, embedId?, title?, thumbUrl? }`. Accepts a raw URL
+ * string on write and lifts it to the object shape (the migration
+ * contract). Unresolvable URLs keep `{ url }` — renderers fall back to a
+ * link. Never stores third-party HTML.
+ */
+export interface EmbedField extends BaseField {
+	type: 'embed';
+}
+
 export type Field =
 	| TextField
 	| RichTextField
@@ -183,9 +217,11 @@ export type Field =
 	| SelectField
 	| RelationshipField
 	| UploadField
+	| GalleryField
 	| ArrayField
 	| BlocksField
-	| JsonField;
+	| JsonField
+	| EmbedField;
 
 // ---------------------------------------------------------------------------
 // Access control
@@ -317,11 +353,30 @@ export interface TableConfig {
 	timestamps?: { createdAt: string; updatedAt: string } | false;
 }
 
+/** One embed provider: which hosts it claims and how to resolve them. */
+export interface EmbedProviderConfig {
+	name: string;
+	/** Host suffixes this provider claims, e.g. ['youtube.com', 'youtu.be']. */
+	hosts: string[];
+	/** Extract the provider's own id from a URL; return null to reject. */
+	extractId?: (url: URL) => string | null;
+	/** FIXED oEmbed endpoint (JSON) for title/thumbnail. Never discovered. */
+	oembed?: string;
+}
+
 export interface UploadConfig {
 	/** Allowed mime type prefixes, e.g. ['image/'] or ['image/png', 'application/pdf']. */
 	mimeTypes?: string[];
 	/** Max file size in bytes. Default 10 MiB. */
 	maxFileSize?: number;
+	/**
+	 * Content-hash dedupe (default true): uploading bytes identical to an
+	 * existing document returns that document (flagged `_deduped`) instead of
+	 * creating a duplicate doc + storage key. Applies to docs created since
+	 * this feature (they carry a managed `contentHash`); table-backed upload
+	 * collections need a `contentHash` column for the lookup.
+	 */
+	dedupe?: boolean;
 }
 
 export interface VersionsConfig {
@@ -509,7 +564,21 @@ export interface CMSConfig {
 		 *  - 'placement'  the per-use aspect select on rich-text upload nodes
 		 */
 		aspects?: { name: string; ratio: string; contexts?: ('preview' | 'placement')[] }[];
+		/**
+		 * The gallery layouts your frontend renders (e.g. grid, strip,
+		 * mosaic). Site vocabulary, not framework CSS: a gallery placement
+		 * stores the layout NAME; your renderer owns what it looks like.
+		 */
+		galleryLayouts?: { name: string }[];
 	};
+	/**
+	 * Embed provider registry. Core resolves YouTube and Vimeo; add providers
+	 * here with fixed hosts (and a fixed oEmbed endpoint if they have one).
+	 * There is intentionally no oEmbed discovery — fetching arbitrary
+	 * editor-supplied URLs server-side is an SSRF vector; a registry of fixed
+	 * endpoints is not.
+	 */
+	embeds?: { providers?: EmbedProviderConfig[] };
 }
 
 export class APIError extends Error {

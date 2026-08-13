@@ -79,6 +79,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			hasLocalizedFields: col.fields.some((f) => f.localized),
 			usage,
 			mediaAspects: cms.config.media?.aspects ?? [],
+		galleryLayouts: cms.config.media?.galleryLayouts ?? [],
 			lockedBy: lock.lockedBy,
 			previewUrl
 		};

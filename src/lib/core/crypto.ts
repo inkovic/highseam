@@ -36,6 +36,12 @@ function hexToBytes(hex: string): Uint8Array {
 
 const PBKDF2_ITERATIONS = 100_000;
 
+/** SHA-256 of raw bytes as lowercase hex — the upload dedupe identity. */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+	const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function hashPassword(password: string): Promise<string> {
 	const salt = crypto.getRandomValues(new Uint8Array(16));
 	const hash = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
