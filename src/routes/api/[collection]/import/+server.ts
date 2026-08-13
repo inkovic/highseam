@@ -56,7 +56,7 @@ export const POST: RequestHandler = ({ locals, params, request }) =>
 
 		const results: {
 			ok: boolean;
-			action?: 'created' | 'updated' | 'unchanged';
+			action?: 'created' | 'updated' | 'unchanged' | 'deduped';
 			id?: string;
 			externalKey?: string;
 			message?: string;

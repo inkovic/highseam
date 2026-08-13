@@ -1,5 +1,8 @@
 <script lang="ts">
 	import RelationPicker from './RelationPicker.svelte';
+	import TagsInput from './TagsInput.svelte';
+	import GalleryInput from './GalleryInput.svelte';
+	import EmbedInput from './EmbedInput.svelte';
 	import type { ClientField } from './client';
 
 	interface RelOption {
@@ -143,6 +146,17 @@
 				<option value={opt.value} selected={isSelected(value, opt.value)}>{opt.label}</option>
 			{/each}
 		</select>
+	{:else if field.type === 'embed'}
+		<EmbedInput name={field.name} {value} readOnly={field.admin.readOnly} />
+	{:else if field.type === 'gallery'}
+		<GalleryInput
+			name={field.name}
+			relationTo={field.relationTo ?? ''}
+			{value}
+			{mediaAspects}
+			maxItems={field.maxItems}
+			readOnly={field.admin.readOnly}
+		/>
 	{:else if field.type === 'relationship' || field.type === 'upload'}
 		<RelationPicker
 			name={field.name}
@@ -157,6 +171,8 @@
 			editable={field.type === 'upload'}
 			{mediaAspects}
 		/>
+	{:else if field.type === 'json' && field.admin?.editor === 'tags'}
+		<TagsInput name={field.name} {value} readOnly={field.admin.readOnly} />
 	{:else if field.type === 'array' || field.type === 'json'}
 		<textarea
 			id={field.name}

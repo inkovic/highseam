@@ -311,6 +311,8 @@ function fieldConfig(
 		case 'array':
 		case 'blocks':
 		case 'json':
+		case 'gallery': // items + populated docs arrive as JSON (typed via REST/typegen)
+		case 'embed':
 			return { type: JSONScalar };
 		case 'relationship':
 		case 'upload': {

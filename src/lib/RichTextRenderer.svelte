@@ -19,6 +19,22 @@
 	const nodes: RichTextNode[] = $derived(
 		Array.isArray(content) ? content : typeof content === 'string' ? markdownToNodes(content) : []
 	);
+
+	// Embeds: iframes come from this allowlist only — never from stored HTML.
+	// Click-to-load facade when a poster frame exists (privacy: no third-party
+	// request until the reader opts in; YouTube goes through nocookie).
+	function embedSrc(node: { provider?: string; embedId?: string }): string | null {
+		if (!node.embedId) return null;
+		if (node.provider === 'youtube')
+			return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(node.embedId)}`;
+		if (node.provider === 'vimeo')
+			return `https://player.vimeo.com/video/${encodeURIComponent(node.embedId)}`;
+		return null;
+	}
+	let activated = $state<Set<number>>(new Set());
+	function activate(i: number) {
+		activated = new Set(activated).add(i);
+	}
 </script>
 
 <div class="rt">
@@ -39,6 +55,27 @@
 			<pre><code>{node.code}</code></pre>
 		{:else if node.type === 'divider'}
 			<hr />
+		{:else if node.type === 'gallery'}
+			{@const gratio = node.fields?.aspect ? parseRatio(node.fields.aspect) : null}
+			<!-- Reference implementation: a simple grid, focal-aware, override-
+			     respecting. Layout names (node.fields.layout) are yours to style:
+			     the wrapper carries data-layout for your CSS. -->
+			<div class="rt-gallery" data-layout={node.fields?.layout ?? 'default'}>
+				{#each node.items ?? [] as item (item.id)}
+					{@const media = refs[item.id]}
+					{#if media && String(media.mimeType ?? '').startsWith('image/')}
+						<figure>
+							<img
+								src={String(media.url)}
+								alt={String(item.alt ?? media.alt ?? '')}
+								style="{gratio ? `aspect-ratio: ${gratio.w} / ${gratio.h};` : 'aspect-ratio: 3 / 2;'} width: 100%; object-fit: cover; object-position: {focalObjectPosition(normalizeFocalPoint(media.focalPoint))};"
+								loading="lazy"
+							/>
+							{#if item.caption ?? media.caption}<figcaption>{item.caption ?? media.caption}</figcaption>{/if}
+						</figure>
+					{/if}
+				{/each}
+			</div>
 		{:else if node.type === 'upload'}
 			{@const media = refs[node.value]}
 			{@const ratio = node.fields?.aspect ? parseRatio(node.fields.aspect) : null}
@@ -59,6 +96,20 @@
 				</figure>
 			{:else if media}
 				<p><a href={String(media.url)}>{String(media.filename ?? 'Download')}</a></p>
+			{/if}
+		{:else if node.type === 'embed'}
+			{@const src = embedSrc(node)}
+			{#if src && (!node.thumbUrl || activated.has(i))}
+				<div class="rt-embed-frame">
+					<iframe {src} title={node.title ?? 'Embedded content'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>
+				</div>
+			{:else if src && node.thumbUrl}
+				<button type="button" class="rt-embed-frame rt-embed-facade" onclick={() => activate(i)} aria-label="Play {node.title ?? 'embedded content'}">
+					<img src={node.thumbUrl} alt={node.title ?? ''} loading="lazy" />
+					<span class="rt-embed-play">▶</span>
+				</button>
+			{:else}
+				<p><a href={node.url} rel="noopener nofollow" target="_blank">{node.title ?? node.url}</a></p>
 			{/if}
 		{:else if node.type === 'relationship'}
 			{@const doc = refs[node.value]}
@@ -103,6 +154,12 @@
 	.rt :global(hr) { border-color: var(--color-border); margin: 1.6em 0; }
 	.rt :global(img) { border-radius: 10px; border: 1px solid var(--color-border); max-width: 100%; }
 	.rt :global(figcaption) { font-size: 0.8em; color: var(--color-muted); margin-top: 0.4em; }
+	.rt-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; margin: 1em 0; }
+	.rt-gallery figure { margin: 0; }
+	.rt-embed-frame { position: relative; aspect-ratio: 16 / 9; width: 100%; margin: 1em 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--color-border); background: #000; padding: 0; display: block; cursor: pointer; }
+	.rt-embed-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+	.rt-embed-facade img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.85; border: 0; border-radius: 0; }
+	.rt-embed-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2.5rem; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,0.7); }
 	.rt-embed { display: block; border: 1px solid var(--color-border); border-radius: 10px; padding: 0.8em 1em; margin: 1em 0; text-decoration: none !important; background: var(--color-elevate); }
 	.rt-embed-kind { display: block; font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-muted); }
 	.rt-embed-title { display: block; font-weight: 600; color: var(--color-fg); }

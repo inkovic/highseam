@@ -20,7 +20,8 @@
 		draftAction = undefined,
 		draftLabel = 'Save draft',
 		autosave = false,
-		mediaAspects = undefined
+		mediaAspects = undefined,
+		galleryLayouts = []
 	}: {
 		collection: ClientCollection;
 		values?: Record<string, unknown>;
@@ -36,6 +37,8 @@
 		autosave?: boolean;
 		/** Registered aspect ratios (cms.config → media.aspects) for the hotspot previews. */
 		mediaAspects?: { name: string; ratio: string }[];
+		/** Gallery layout vocabulary (cms.config → media.galleryLayouts). */
+		galleryLayouts?: { name: string }[];
 	} = $props();
 
 	const hasFocalField = $derived(collection.fields.some((f) => f.name === 'focalPoint'));
@@ -204,7 +207,7 @@
 			<BlocksInput {field} mediaAspects={mediaAspects ?? []} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'richText'}
-			<RichTextInput mediaAspects={mediaAspects ?? []} {field} value={values[field.name]} {relOptions} />
+			<RichTextInput mediaAspects={mediaAspects ?? []} {galleryLayouts} {field} value={values[field.name]} {relOptions} />
 			{#if errors[field.name]}<p class="text-xs text-(--color-danger)">{errors[field.name]}</p>{/if}
 		{:else if field.type === 'html'}
 			<HtmlInput {field} value={values[field.name]} />

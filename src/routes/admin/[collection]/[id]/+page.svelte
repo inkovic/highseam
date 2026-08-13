@@ -216,6 +216,7 @@
 			draftAction={data.collection.drafts ? `?/saveDraft${localeSuffix}` : undefined}
 			autosave={data.collection.drafts}
 			mediaAspects={data.mediaAspects}
+			galleryLayouts={data.galleryLayouts}
 		/>
 	</div>
 

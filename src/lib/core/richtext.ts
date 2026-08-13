@@ -29,6 +29,15 @@ export type RichTextNode =
 	| { type: 'code'; code: string }
 	| { type: 'divider' }
 	| {
+			type: 'gallery';
+			relationTo: string;
+			/** Ordered refs with per-item overrides (resolveMedia precedence). */
+			items: { id: string; alt?: string; caption?: string }[];
+			/** Presentation, not identity: layout name from media.galleryLayouts,
+			 *  optional per-item aspect from media.aspects. */
+			fields?: { layout?: string; aspect?: string };
+	  }
+	| {
 			type: 'upload';
 			relationTo: string;
 			value: string;
@@ -38,6 +47,16 @@ export type RichTextNode =
 			 * doc keeps the focal point; the renderer crops this USE of it.
 			 */
 			fields?: { aspect?: string };
+	  }
+	| {
+			type: 'embed';
+			/** The pasted URL — the durable source of truth. */
+			url: string;
+			/** Filled by server-side resolution at save (embed registry). */
+			provider?: string;
+			embedId?: string;
+			title?: string;
+			thumbUrl?: string;
 	  }
 	| { type: 'relationship'; relationTo: string; value: string }
 	| { type: 'block'; blockType: string; fields: Record<string, unknown> };
@@ -50,6 +69,8 @@ export const ALL_NODE_TYPES = [
 	'code',
 	'divider',
 	'upload',
+	'gallery',
+	'embed',
 	'relationship',
 	'block'
 ] as const;
@@ -207,6 +228,52 @@ export function sanitizeNodes(value: unknown): RichTextNode[] {
 				}
 				break;
 			}
+			case 'gallery': {
+				if (typeof node.relationTo !== 'string') break;
+				const rawItems = (node as { items?: unknown }).items;
+				if (!Array.isArray(rawItems)) break;
+				const items: { id: string; alt?: string; caption?: string }[] = [];
+				for (const raw of rawItems) {
+					// Upgrade path: bare id strings lift to the item shape.
+					if (typeof raw === 'string' && raw) {
+						items.push({ id: raw });
+						continue;
+					}
+					if (typeof raw !== 'object' || raw === null) continue;
+					const it = raw as Record<string, unknown>;
+					if (typeof it.id !== 'string' || !it.id) continue;
+					const item: { id: string; alt?: string; caption?: string } = { id: it.id };
+					if (typeof it.alt === 'string') item.alt = it.alt;
+					if (typeof it.caption === 'string') item.caption = it.caption;
+					items.push(item);
+				}
+				const clean: Extract<RichTextNode, { type: 'gallery' }> = {
+					type: 'gallery',
+					relationTo: node.relationTo,
+					items
+				};
+				const nf = (node as { fields?: Record<string, unknown> }).fields;
+				const fields: { layout?: string; aspect?: string } = {};
+				if (typeof nf?.layout === 'string' && /^[\w-]{1,40}$/.test(nf.layout)) fields.layout = nf.layout;
+				if (typeof nf?.aspect === 'string' && isRatio(nf.aspect)) fields.aspect = nf.aspect;
+				if (fields.layout || fields.aspect) clean.fields = fields;
+				out.push(clean);
+				break;
+			}
+			case 'embed': {
+				const u = typeof node.url === 'string' ? node.url.trim() : '';
+				if (!/^https?:\/\//i.test(u)) break;
+				const clean: Extract<RichTextNode, { type: 'embed' }> = { type: 'embed', url: u };
+				if (typeof node.provider === 'string' && /^[\w-]{1,40}$/.test(node.provider))
+					clean.provider = node.provider;
+				if (typeof node.embedId === 'string' && node.embedId.length <= 200)
+					clean.embedId = node.embedId;
+				if (typeof node.title === 'string') clean.title = node.title.slice(0, 300);
+				if (typeof node.thumbUrl === 'string' && /^https:\/\//.test(node.thumbUrl))
+					clean.thumbUrl = node.thumbUrl;
+				out.push(clean);
+				break;
+			}
 			case 'relationship':
 				if (typeof node.value === 'string' && typeof node.relationTo === 'string') {
 					out.push({ type: node.type, relationTo: node.relationTo, value: node.value });
@@ -247,6 +314,8 @@ export function validateRichTextNodes(
 		}
 		if (node.type === 'upload' && field.uploads && node.relationTo !== field.uploads)
 			return `Node ${i + 1}: uploads must reference "${field.uploads}"`;
+		if (node.type === 'gallery' && field.uploads && node.relationTo !== field.uploads)
+			return `Node ${i + 1}: gallery must reference "${field.uploads}"`;
 		if (
 			node.type === 'relationship' &&
 			field.relationships &&
@@ -264,6 +333,11 @@ export function extractRichTextRefs(value: unknown): { relationTo: string; id: s
 	for (const node of value as RichTextNode[]) {
 		if ((node.type === 'upload' || node.type === 'relationship') && node.value) {
 			refs.push({ relationTo: node.relationTo, id: node.value });
+		}
+		if (node.type === 'gallery') {
+			for (const item of node.items ?? []) {
+				if (item?.id) refs.push({ relationTo: node.relationTo, id: item.id });
+			}
 		}
 	}
 	return refs;

@@ -11,6 +11,7 @@ export { validateData, sanitizeData, applyDefaults } from './validate';
 export { generateTypes } from './typegen';
 export { getSchema } from './graphql';
 export { sanitizeDocumentHtml, sanitizeNodes, extractRichTextRefs } from './richtext';
+export { matchEmbedProvider, resolveEmbed, DEFAULT_EMBED_PROVIDERS, type ResolvedEmbed } from './embed';
 export {
 	resolveMedia,
 	mediaMeta,

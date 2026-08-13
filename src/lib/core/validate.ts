@@ -76,6 +76,26 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			for (const id of ids) if (typeof id !== 'string') return 'Invalid upload reference';
 			break;
 		}
+		case 'embed': {
+			if (typeof value !== 'object' || value === null) return 'Must be an embed object';
+			const u = (value as Record<string, unknown>).url;
+			if (typeof u !== 'string' || !/^https?:\/\//i.test(u)) return 'Embed needs an http(s) url';
+			break;
+		}
+		case 'gallery': {
+			if (!Array.isArray(value)) return 'Must be an array of gallery items';
+			if (field.maxItems && value.length > field.maxItems)
+				return `Allows at most ${field.maxItems} item(s)`;
+			for (const item of value) {
+				if (typeof item !== 'object' || item === null) return 'Gallery items must be objects';
+				const it = item as Record<string, unknown>;
+				if (typeof it.id !== 'string' || !it.id) return 'Gallery item needs an id';
+				if (it.alt !== undefined && typeof it.alt !== 'string') return 'Gallery alt must be a string';
+				if (it.caption !== undefined && typeof it.caption !== 'string')
+					return 'Gallery caption must be a string';
+			}
+			break;
+		}
 		case 'array': {
 			if (!Array.isArray(value)) return 'Must be an array';
 			for (const row of value) {
@@ -209,6 +229,40 @@ function coerce(field: Field, value: unknown): unknown {
 					.filter(Boolean);
 			}
 			return value;
+		case 'embed': {
+			// Upgrade path: raw URL strings (the shape consumer videoEmbed blocks
+			// stored) lift to the object shape; resolution happens at save.
+			if (typeof value === 'string') {
+				const u = value.trim();
+				if (!u) return null;
+				if (u.startsWith('{')) {
+					try {
+						return JSON.parse(u);
+					} catch {
+						return { url: u };
+					}
+				}
+				return { url: u };
+			}
+			return value;
+		}
+		case 'gallery': {
+			let v = value;
+			if (typeof v === 'string') {
+				try {
+					v = v.trim() === '' ? null : JSON.parse(v);
+				} catch {
+					return v; // let validation flag it
+				}
+			}
+			// Upgrade path (the migration contract): a bare id array — the shape
+			// consumer gallery blocks stored before this field existed — lifts to
+			// the item shape instead of being eaten by validation.
+			if (Array.isArray(v)) {
+				return v.map((item) => (typeof item === 'string' ? { id: item } : item));
+			}
+			return v;
+		}
 		case 'array':
 		case 'blocks':
 		case 'json':
