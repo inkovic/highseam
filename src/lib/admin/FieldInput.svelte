@@ -3,6 +3,7 @@
 	import TagsInput from './TagsInput.svelte';
 	import GalleryInput from './GalleryInput.svelte';
 	import EmbedInput from './EmbedInput.svelte';
+	import LinkInput from './LinkInput.svelte';
 	import type { ClientField } from './client';
 
 	interface RelOption {
@@ -146,6 +147,8 @@
 				<option value={opt.value} selected={isSelected(value, opt.value)}>{opt.label}</option>
 			{/each}
 		</select>
+	{:else if field.type === 'link'}
+		<LinkInput name={field.name} {value} relationTo={field.linkTo ?? []} {relOptions} readOnly={field.admin.readOnly} />
 	{:else if field.type === 'embed'}
 		<EmbedInput name={field.name} {value} readOnly={field.admin.readOnly} />
 	{:else if field.type === 'gallery'}

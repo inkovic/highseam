@@ -227,7 +227,14 @@ const pages = defineCollection({
 						{ name: 'heading', type: 'text', required: true },
 						{ name: 'subheading', type: 'textarea' },
 						{ name: 'ctaLabel', type: 'text' },
-						{ name: 'ctaUrl', type: 'text' }
+						{
+							// The link primitive: internal ref (survives slug renames)
+							// or external URL — one picker. Old string hrefs lift to
+							// { url } on save.
+							name: 'ctaLink',
+							type: 'link',
+							relationTo: ['pages', 'posts']
+						}
 					]
 				},
 				{

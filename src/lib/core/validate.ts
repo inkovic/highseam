@@ -76,6 +76,21 @@ function validateField(field: Field, value: unknown, data: Record<string, unknow
 			for (const id of ids) if (typeof id !== 'string') return 'Invalid upload reference';
 			break;
 		}
+		case 'link': {
+			if (typeof value !== 'object' || value === null) return 'Must be a link object';
+			const v = value as Record<string, unknown>;
+			const hasUrl = typeof v.url === 'string' && v.url !== '';
+			const d = v.doc as Record<string, unknown> | undefined;
+			const hasDoc =
+				d != null && typeof d === 'object' && typeof d.collection === 'string' && typeof d.id === 'string' && d.id !== '';
+			if (hasUrl === hasDoc) return 'Link needs either a url or a doc reference (not both)';
+			if (hasUrl && !/^(https?:\/\/|mailto:|tel:|\/(?!\/))/i.test(v.url as string))
+				return 'Link url must be http(s), mailto:, tel:, or a site-relative path';
+			if (hasDoc && field.relationTo && !field.relationTo.includes(d!.collection as string))
+				return `Link may only target: ${field.relationTo.join(', ')}`;
+			if (v.newTab !== undefined && typeof v.newTab !== 'boolean') return 'newTab must be a boolean';
+			break;
+		}
 		case 'embed': {
 			if (typeof value !== 'object' || value === null) return 'Must be an embed object';
 			const u = (value as Record<string, unknown>).url;
@@ -229,6 +244,23 @@ function coerce(field: Field, value: unknown): unknown {
 					.filter(Boolean);
 			}
 			return value;
+		case 'link': {
+			// Upgrade path: raw href strings (quote_href-style text fields) lift
+			// to { url }. JSON strings (form posts) parse to the object.
+			if (typeof value === 'string') {
+				const u = value.trim();
+				if (!u) return null;
+				if (u.startsWith('{')) {
+					try {
+						return JSON.parse(u);
+					} catch {
+						return { url: u };
+					}
+				}
+				return { url: u };
+			}
+			return value;
+		}
 		case 'embed': {
 			// Upgrade path: raw URL strings (the shape consumer videoEmbed blocks
 			// stored) lift to the object shape; resolution happens at save.
@@ -264,7 +296,35 @@ function coerce(field: Field, value: unknown): unknown {
 			return v;
 		}
 		case 'array':
-		case 'blocks':
+		case 'blocks': {
+			let v = value;
+			if (typeof v === 'string') {
+				try {
+					v = v.trim() === '' ? null : JSON.parse(v);
+				} catch {
+					return v; // let validation flag it
+				}
+			}
+			// Recurse into rows so sub-field contracts hold INSIDE blocks and
+			// arrays too — the upgrade paths (link/embed strings, gallery bare
+			// ids) were written for values that live exactly here.
+			if (Array.isArray(v)) {
+				return v.map((row) => {
+					if (typeof row !== 'object' || row === null) return row;
+					const r = row as Record<string, unknown>;
+					const subs =
+						field.type === 'array'
+							? field.fields
+							: (field.blocks.find((b) => b.slug === r.blockType)?.fields ?? []);
+					const outRow = { ...r };
+					for (const sub of subs) {
+						if (sub.name in outRow) outRow[sub.name] = coerce(sub, outRow[sub.name]);
+					}
+					return outRow;
+				});
+			}
+			return v;
+		}
 		case 'json':
 			if (typeof value === 'string') {
 				try {

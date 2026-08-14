@@ -31,6 +31,8 @@ export interface ClientField {
 	minRows?: number;
 	maxRows?: number;
 	maxItems?: number;
+	/** link: collections internal links may target. */
+	linkTo?: string[];
 	/** richText: embeddable upload collection + relationship targets */
 	uploads?: string;
 	relationships?: string[];
@@ -109,6 +111,7 @@ function toClientField(f: Field): ClientField {
 		base.relationTo = f.relationTo;
 		base.maxItems = f.maxItems;
 	}
+	if (f.type === 'link') base.linkTo = f.relationTo;
 	if (f.type === 'array') base.fields = f.fields.map(toClientField);
 	if (f.type === 'blocks') {
 		base.blocks = f.blocks.map((b) => ({

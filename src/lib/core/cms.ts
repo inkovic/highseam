@@ -617,8 +617,9 @@ export class CMS {
 		for (const col of this.config.collections) {
 			const fields = col.fields.filter(
 				(f) =>
-					(f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
-					f.relationTo === targetSlug
+					((f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
+						f.relationTo === targetSlug) ||
+					(f.type === 'link' && (f.relationTo ?? []).includes(targetSlug))
 			);
 			// richText fields can embed uploads/relationships inside their nodes.
 			const richTextFields = col.fields.filter(
@@ -633,8 +634,13 @@ export class CMS {
 				for (const f of fields) {
 					const v = doc[f.name];
 					for (const entry of Array.isArray(v) ? v : [v]) {
-						// gallery items are { id, ... }; relationship/upload are ids.
-						const id = typeof entry === 'object' && entry !== null ? (entry as Doc).id : entry;
+						// gallery items are { id }; links are { doc: { collection, id } };
+						// relationship/upload are bare ids.
+						let id: unknown = entry;
+						if (typeof entry === 'object' && entry !== null) {
+							const e = entry as { id?: unknown; doc?: { collection?: string; id?: unknown } };
+							id = e.doc ? (e.doc.collection === targetSlug ? e.doc.id : undefined) : e.id;
+						}
 						if (typeof id === 'string' && id) referenced.add(id);
 					}
 				}
@@ -660,8 +666,9 @@ export class CMS {
 			const titleKey = col.admin?.useAsTitle ?? 'id';
 			const direct = col.fields.filter(
 				(f) =>
-					(f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
-					f.relationTo === targetSlug
+					((f.type === 'relationship' || f.type === 'upload' || f.type === 'gallery') &&
+						f.relationTo === targetSlug) ||
+					(f.type === 'link' && (f.relationTo ?? []).includes(targetSlug))
 			);
 			const rich = col.fields.filter(
 				(f) =>
@@ -675,9 +682,13 @@ export class CMS {
 				const title = String(doc[titleKey] ?? doc.id);
 				for (const f of direct) {
 					const v = doc[f.name];
-					const hit = (Array.isArray(v) ? v : [v]).some(
-						(x) => x === id || (typeof x === 'object' && x !== null && (x as Doc).id === id)
-					);
+					const hit = (Array.isArray(v) ? v : [v]).some((x) => {
+						if (x === id) return true;
+						if (typeof x !== 'object' || x === null) return false;
+						const e = x as { id?: unknown; doc?: { collection?: string; id?: unknown } };
+						if (e.doc) return e.doc.collection === targetSlug && e.doc.id === id;
+						return e.id === id;
+					});
 					if (hit) uses.push({ collection: col.slug, id: doc.id, field: f.name, title });
 				}
 				for (const f of rich) {
@@ -1277,10 +1288,29 @@ export class CMS {
 	private async populate(req: ReqContext, col: CollectionConfig, doc: Doc, depth: number): Promise<Doc> {
 		const out = { ...doc };
 		for (const field of col.fields) {
-			if (field.type !== 'relationship' && field.type !== 'upload' && field.type !== 'gallery')
+			if (
+				field.type !== 'relationship' &&
+				field.type !== 'upload' &&
+				field.type !== 'gallery' &&
+				field.type !== 'link'
+			)
 				continue;
 			const value = out[field.name];
 			if (value == null) continue;
+
+			if (field.type === 'link') {
+				// Internal links resolve their target into doc.resolved.
+				const v = value as { doc?: { collection: string; id: string; resolved?: unknown } };
+				if (v.doc?.collection && v.doc.id && this.hasCollection(v.doc.collection)) {
+					try {
+						const resolved = await this.findByID(req, v.doc.collection, v.doc.id, { depth: depth - 1 });
+						out[field.name] = { ...v, doc: { ...v.doc, resolved } };
+					} catch {
+						/* dangling or forbidden: leave the raw reference */
+					}
+				}
+				continue;
+			}
 			if (!this.hasCollection(field.relationTo)) continue;
 
 			const resolve = async (id: unknown): Promise<unknown> => {

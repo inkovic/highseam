@@ -313,6 +313,7 @@ function fieldConfig(
 		case 'json':
 		case 'gallery': // items + populated docs arrive as JSON (typed via REST/typegen)
 		case 'embed':
+		case 'link':
 			return { type: JSONScalar };
 		case 'relationship':
 		case 'upload': {

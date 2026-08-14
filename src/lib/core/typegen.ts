@@ -50,6 +50,8 @@ function fieldType(f: Field, relNames: Map<string, string>): string {
 		}
 		case 'embed':
 			return `{ url: string; provider?: string; embedId?: string; title?: string; thumbUrl?: string }`;
+		case 'link':
+			return `{ url?: string; newTab?: boolean; doc?: { collection: string; id: string; resolved?: Record<string, unknown> } }`;
 		case 'gallery': {
 			const related = relNames.get(f.relationTo) ?? 'string';
 			return `{ id: string; alt?: string; caption?: string; doc?: ${related} }[]`;
