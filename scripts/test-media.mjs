@@ -201,5 +201,30 @@ console.log('\ncontent hash');
 	check('different bytes differ', (await sha256Hex(new TextEncoder().encode('x'))) === h1, false);
 }
 
+console.log('\nlink (href resolution + attrs)');
+{
+	const { linkHref, linkAttrs } = await import('../src/lib/core/link.ts');
+	const routes = { pages: (d) => `/${d.slug}`, venues: (d) => `/parks/${d.slug}` };
+
+	check('external url passes through', linkHref({ url: 'https://x.com/a' }), 'https://x.com/a');
+	check('mailto allowed', linkHref({ url: 'mailto:hi@x.com' }), 'mailto:hi@x.com');
+	check('site-relative allowed', linkHref({ url: '/about' }), '/about');
+	check('protocol-relative rejected', linkHref({ url: '//evil.com' }), null);
+	check('javascript: rejected', linkHref({ url: 'javascript:alert(1)' }), null);
+	check(
+		'internal resolves via route map',
+		linkHref({ doc: { collection: 'venues', id: 'v1', resolved: { id: 'v1', slug: 'toomuc' } } }, routes),
+		'/parks/toomuc'
+	);
+	check(
+		'unpopulated internal → null (skip the anchor, not a dead #)',
+		linkHref({ doc: { collection: 'venues', id: 'v1' } }, routes),
+		null
+	);
+	check('no route registered → null', linkHref({ doc: { collection: 'users', id: 'u', resolved: { id: 'u' } } }, routes), null);
+	check('newTab attrs pair safely', linkAttrs({ url: '/x', newTab: true }), { target: '_blank', rel: 'noopener' });
+	check('no newTab → empty attrs', linkAttrs({ url: '/x' }), {});
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.7.0 — 2026-08-14 · Wave 2
+
+The link primitive plus rich-text ergonomics. Zero stub changes.
+
+- **`link` field** — internal document reference OR external URL, one value,
+  one picker: `{ doc: { collection, id } } | { url }`, optional `newTab`.
+  Internal links are stored **by id and resolved at render**, so slug renames
+  never break stored links — the no-redirects policy expressed as a field
+  type; the internal-link rewrite migration this replaces should never need
+  to run again. Declare `relationTo: ['pages', …]` to enable the internal
+  picker (omit for URL-only fields). External urls accept http(s), mailto:,
+  tel:, and site-relative paths — protocol-relative and javascript: are
+  rejected. `linkHref(value, routes)` maps resolved targets to your URLs and
+  returns null for unpopulated/dangling links (skip the anchor, don't render
+  a dead '#'); `linkAttrs()` pairs `target="_blank"` with `rel="noopener"`.
+  Usage scans (`referencedIds`/`findUsage`) count link references, and
+  top-level link fields populate `doc.resolved` at depth ≥ 1.
+  **Migration contract: raw href strings lift to `{ url }` — including
+  inside blocks** (see below).
+- **Coercion now recurses into blocks and array rows.** The upgrade paths
+  (link/embed strings, gallery bare-id arrays) previously held only at the
+  top level; the values they were written for live inside blocks. Caught by
+  our own e2e before it half-landed on the consumer.
+- **Slash-command insert.** Type `/` in an empty paragraph: a filterable
+  menu of everything the + menu offers (headings, lists, image, gallery,
+  embed, your components); type to filter, arrows + Enter, Escape closes.
+- **Drag to reorder nodes.** Every rich-text node card grows a ⠿ handle;
+  drop indicator shows the insertion point.
+
+Known contract, unchanged from every ref type before it: values inside
+blocks/array rows don't auto-populate — resolve refs at read (consumers
+already do this for relationships in blocks). `linkHref` returning null for
+unpopulated internal links is the graceful half of that contract.
+
+Deliberately not shipped (Wave 2 had three items on the roadmap):
+edit-inside-MediaPicker stays behind its trigger — no field report has shown
+metadata-fixing-during-selection yet.
+
+Stub changes: none.
+
 ## 1.6.0 — 2026-08-13 · Wave 1
 
 The enhanced-fields wave, in the consumer-pressure-tested order: repeater

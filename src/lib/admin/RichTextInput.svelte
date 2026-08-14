@@ -277,16 +277,70 @@
 		const el = e.currentTarget;
 		const node = nodes[i];
 		if ('html' in node) node.html = el.innerHTML;
+		// Slash command: '/' at the start of a paragraph opens the insert menu;
+		// whatever follows filters it.
+		const plain = el.textContent ?? '';
+		if (node.type === 'p' && plain.startsWith('/')) {
+			slashAt = i;
+			slashFilter = plain.slice(1).toLowerCase();
+			slashIndex = 0;
+		} else if (slashAt === i) {
+			slashAt = -1;
+		}
 		maybeInputRule(el, i);
 	}
 
+	// --- slash-command insert menu (matches + apply live after addItems) --------
+	let slashAt = $state(-1);
+	let slashFilter = $state('');
+	let slashIndex = $state(0);
+
 	// --- keyboard: Enter/Backspace + type shortcuts + plain-text paste -----------
+
+	// --- drag to reorder ---------------------------------------------------------
+	let dragIdx = $state(-1);
+	let overIdx = $state(-1);
+	function onDropNode(i: number) {
+		if (dragIdx < 0 || dragIdx === i) {
+			dragIdx = -1;
+			overIdx = -1;
+			return;
+		}
+		const [moved] = nodes.splice(dragIdx, 1);
+		nodes.splice(dragIdx < i ? i - 1 : i, 0, moved);
+		dragIdx = -1;
+		overIdx = -1;
+	}
 
 	let plainPasteNext = false;
 
 	function onTextKeydown(e: KeyboardEvent & { currentTarget: HTMLElement }, i: number) {
 		const el = e.currentTarget;
 		const mod = e.metaKey || e.ctrlKey;
+
+		// Slash menu owns the keyboard while open on this node.
+		if (slashAt === i && slashMatches.length > 0) {
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				slashIndex = (slashIndex + 1) % slashMatches.length;
+				return;
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				slashIndex = (slashIndex - 1 + slashMatches.length) % slashMatches.length;
+				return;
+			}
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				applySlash(slashMatches[Math.min(slashIndex, slashMatches.length - 1)]);
+				return;
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				slashAt = -1;
+				return;
+			}
+		}
 
 		if (mod && e.altKey && ['1', '2', '3'].includes(e.key)) {
 			e.preventDefault();
@@ -416,6 +470,21 @@
 		}))
 	];
 
+	const slashMatches = $derived(
+		slashAt >= 0
+			? addItems.filter((it) => it.label.toLowerCase().includes(slashFilter))
+			: []
+	);
+	function applySlash(item: AddItem) {
+		const i = slashAt;
+		if (i < 0) return;
+		const made = { ...item.make(), _key: key() } as EditorNode;
+		nodes.splice(i, 1, made);
+		slashAt = -1;
+		slashFilter = '';
+		if ('html' in made) queueMicrotask(() => focusNode(made._key, 'start'));
+	}
+
 	// --- contenteditable wiring --------------------------------------------------
 	// Set innerHTML exactly once (mount); reads flow DOM -> state on input, so
 	// the caret never jumps. Keyed {#each} keeps DOM nodes across reorders.
@@ -496,9 +565,37 @@
 		<div class="divide-y divide-(--color-border)">
 			{#each nodes as node, i (node._key)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="group/node relative" onfocusin={() => (focusedIndex = i)}>
+				<div
+					class="group/node relative {overIdx === i && dragIdx !== -1 ? 'border-t-2 border-(--color-primary)' : ''}"
+					onfocusin={() => (focusedIndex = i)}
+					ondragover={(e) => {
+						if (dragIdx === -1) return;
+						e.preventDefault();
+						overIdx = i;
+					}}
+					ondrop={(e) => {
+						e.preventDefault();
+						onDropNode(i);
+					}}
+				>
 					<!-- node controls -->
 					<div class="absolute top-1 right-1 z-10 flex items-center gap-0.5 rounded bg-(--color-elevate) opacity-0 transition-opacity group-hover/node:opacity-100">
+						<span
+							class="cursor-grab px-1 text-xs text-(--color-muted) select-none active:cursor-grabbing"
+							title="Drag to reorder"
+							draggable="true"
+							role="button"
+							tabindex="-1"
+							ondragstart={(e) => {
+								dragIdx = i;
+								e.dataTransfer?.setData('text/plain', String(i));
+								if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+							}}
+							ondragend={() => {
+								dragIdx = -1;
+								overIdx = -1;
+							}}
+						>⠿</span>
 						{#if 'html' in node}
 							<select
 								class="rounded border border-(--color-border) bg-(--color-elevate) px-1 py-0.5 text-[10px] text-(--color-muted)"
@@ -536,6 +633,27 @@
 										: ''}"
 							data-placeholder={node.type === 'p' ? 'Type something…' : node.type.toUpperCase()}
 						></div>
+						{#if slashAt === i}
+							<div class="absolute z-20 mt-0.5 max-h-64 w-56 overflow-y-auto rounded-(--radius) border border-(--color-border) bg-(--color-bg) py-1 shadow-xl" data-hs-slash-menu>
+								{#if slashMatches.length === 0}
+									<p class="px-3 py-1.5 text-xs text-(--color-muted)">No matches for “/{slashFilter}”</p>
+								{:else}
+									{#each slashMatches as item, mi (item.label)}
+										<button
+											type="button"
+											class="block w-full px-3 py-1.5 text-left text-sm {mi === slashIndex ? 'bg-(--color-elevate-2) text-(--color-primary)' : 'text-(--color-fg) hover:bg-(--color-elevate-2)'}"
+											onmouseenter={() => (slashIndex = mi)}
+											onmousedown={(e) => {
+												e.preventDefault();
+												applySlash(item);
+											}}
+										>
+											{item.label}
+										</button>
+									{/each}
+								{/if}
+							</div>
+						{/if}
 					{:else if node.type === 'ul' || node.type === 'ol'}
 						<div class="space-y-0.5 px-3 py-2">
 							{#each node.items as item, j (j)}

@@ -14,6 +14,7 @@
 	import TagsInput from './TagsInput.svelte';
 	import GalleryInput from './GalleryInput.svelte';
 	import EmbedInput from './EmbedInput.svelte';
+	import LinkInput from './LinkInput.svelte';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
 
@@ -216,6 +217,15 @@
 										value={rows[i][sub.name]}
 										{relOptions}
 										{mediaAspects}
+										submitHidden={false}
+										onChange={(v) => (rows[i][sub.name] = v)}
+									/>
+								{:else if sub.type === 'link'}
+									<LinkInput
+										name="_blk_{sub.name}"
+										value={rows[i][sub.name]}
+										relationTo={sub.linkTo ?? []}
+										{relOptions}
 										submitHidden={false}
 										onChange={(v) => (rows[i][sub.name] = v)}
 									/>

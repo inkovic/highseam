@@ -37,7 +37,8 @@ export type FieldType =
 	| 'blocks'
 	| 'json'
 	| 'gallery'
-	| 'embed';
+	| 'embed'
+	| 'link';
 
 export interface SelectOption {
 	label: string;
@@ -207,6 +208,22 @@ export interface EmbedField extends BaseField {
 	type: 'embed';
 }
 
+/**
+ * Internal document reference OR external URL, one value:
+ * `{ doc: { collection, id } } | { url }`, optional `newTab`. Internal links
+ * are stored by id and resolved at render, so slug renames never break
+ * stored links. Accepts a raw URL string on write and lifts it to `{ url }`
+ * (the migration contract for text-field hrefs).
+ */
+export interface LinkField extends BaseField {
+	type: 'link';
+	/**
+	 * Collections internal links may target. Omit for an external-URL-only
+	 * link field (the internal picker doesn't render).
+	 */
+	relationTo?: string[];
+}
+
 export type Field =
 	| TextField
 	| RichTextField
@@ -221,7 +238,8 @@ export type Field =
 	| ArrayField
 	| BlocksField
 	| JsonField
-	| EmbedField;
+	| EmbedField
+	| LinkField;
 
 // ---------------------------------------------------------------------------
 // Access control

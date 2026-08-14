@@ -12,6 +12,7 @@ export { generateTypes } from './typegen';
 export { getSchema } from './graphql';
 export { sanitizeDocumentHtml, sanitizeNodes, extractRichTextRefs } from './richtext';
 export { matchEmbedProvider, resolveEmbed, DEFAULT_EMBED_PROVIDERS, type ResolvedEmbed } from './embed';
+export { linkHref, linkAttrs, LINK_URL_RE, type LinkValue } from './link';
 export {
 	resolveMedia,
 	mediaMeta,
