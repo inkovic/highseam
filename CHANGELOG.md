@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.1 — 2026-09-16 · richText inside blocks
+
+- **richText sub-fields inside `blocks` / `array` rows get the real editor.**
+  BlocksInput rendered them as a plain textarea bound to the node array, so
+  the form showed `[object Object],[object Object]` and a save wrote that
+  string over the nodes. RichTextInput now takes `submitHidden`, `onChange`
+  and `showLabel` like the other row-capable inputs and BlocksInput uses it;
+  `galleryLayouts` is forwarded from DocForm → BlocksInput → nested rows.
+  Found on PawScapes' destination landing sections (a `sectionImage` block
+  with a `body` richText) the first time one was opened in the admin.
+- **LinkInput no longer overflows inside a block row.** The collection
+  select carried `w-full` from the shared input class and won the cascade
+  over `w-auto`, shoving the relation picker outside the card. The select is
+  `w-auto shrink-0` and the row wraps.
+
 ## 1.7.0 — 2026-08-14 · Wave 2
 
 The link primitive plus rich-text ergonomics. Zero stub changes.

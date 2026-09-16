@@ -25,7 +25,10 @@
 		value = undefined,
 		relOptions = {},
 		mediaAspects = [],
-		galleryLayouts = []
+		galleryLayouts = [],
+		submitHidden = true,
+		onChange = undefined,
+		showLabel = true
 	}: {
 		field: ClientField;
 		value?: unknown;
@@ -35,6 +38,12 @@
 		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
 		/** Gallery layout vocabulary (cms.config → media.galleryLayouts). */
 		galleryLayouts?: { name: string }[];
+		/** Render the hidden JSON input (form mode). False inside a block/array row. */
+		submitHidden?: boolean;
+		/** Callback mode: receives the node array on every change (1.7.1). */
+		onChange?: (nodes: RichTextNode[]) => void;
+		/** Parents that already rendered a label for this field pass false. */
+		showLabel?: boolean;
 	} = $props();
 
 	function key(): string {
@@ -55,6 +64,13 @@
 	let nodes = $state<EditorNode[]>(initialNodes());
 
 	const serialized = $derived(JSON.stringify(nodes.map(({ _key, ...node }) => node)));
+
+	// Callback mode (inside BlocksInput rows): push the plain node array up on
+	// every change. The parent owns serialization; no hidden input here.
+	$effect(() => {
+		if (!onChange) return;
+		onChange(JSON.parse(serialized) as RichTextNode[]);
+	});
 
 	// --- structural ops --------------------------------------------------------
 
@@ -536,12 +552,14 @@
 </script>
 
 <div class="space-y-1.5">
-	<span class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase">
-		{field.label}
-		{#if field.required}<span class="text-(--color-primary)">*</span>{/if}
-	</span>
+	{#if showLabel}
+		<span class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase">
+			{field.label}
+			{#if field.required}<span class="text-(--color-primary)">*</span>{/if}
+		</span>
+	{/if}
 
-	<input type="hidden" name={field.name} value={serialized} />
+	{#if submitHidden}<input type="hidden" name={field.name} value={serialized} />{/if}
 
 	<div class="overflow-hidden rounded-(--radius) border border-(--color-border) bg-(--color-elevate)">
 		<!-- inline formatting toolbar (applies to the focused text block) -->

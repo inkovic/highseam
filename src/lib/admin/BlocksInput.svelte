@@ -15,6 +15,7 @@
 	import GalleryInput from './GalleryInput.svelte';
 	import EmbedInput from './EmbedInput.svelte';
 	import LinkInput from './LinkInput.svelte';
+	import RichTextInput from './RichTextInput.svelte';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
 
@@ -25,6 +26,7 @@
 		value = undefined,
 		relOptions = {},
 		mediaAspects = [],
+		galleryLayouts = [],
 		submitHidden = true,
 		onChange = undefined,
 		showLabel = true
@@ -34,6 +36,8 @@
 		relOptions?: Record<string, RelOption[]>;
 		/** Aspect registry, forwarded to upload sub-fields' edit modal. */
 		mediaAspects?: { name: string; ratio: string; contexts?: string[] }[];
+		/** Gallery layout vocabulary, forwarded to richText sub-fields (1.7.1). */
+		galleryLayouts?: { name: string }[];
 		/** Render the hidden JSON input (form mode). False inside a parent repeater. */
 		submitHidden?: boolean;
 		/** Callback mode: receives the rows value on every change. */
@@ -173,8 +177,22 @@
 								<label class="block text-[11px] font-medium text-(--color-muted)" for="{field.name}-{i}-{sub.name}">
 									{sub.label}{#if sub.required}<span class="text-(--color-primary)"> *</span>{/if}
 								</label>
-								{#if sub.type === 'textarea' || sub.type === 'richText'}
-									<textarea id="{field.name}-{i}-{sub.name}" rows={sub.type === 'richText' ? 5 : 3} class={inputClass} bind:value={rows[i][sub.name] as string}></textarea>
+								{#if sub.type === 'richText'}
+									<!-- 1.7.1: the real editor, not a textarea. A richText sub-field
+									     is a node array; the textarea showed "[object Object]" and
+									     saved a string over it. -->
+									<RichTextInput
+										field={sub}
+										value={rows[i][sub.name]}
+										{relOptions}
+										{mediaAspects}
+										{galleryLayouts}
+										submitHidden={false}
+										showLabel={false}
+										onChange={(v) => (rows[i][sub.name] = v)}
+									/>
+								{:else if sub.type === 'textarea'}
+									<textarea id="{field.name}-{i}-{sub.name}" rows={3} class={inputClass} bind:value={rows[i][sub.name] as string}></textarea>
 								{:else if sub.type === 'number'}
 									<input id="{field.name}-{i}-{sub.name}" type="number" step="any" class={inputClass} bind:value={rows[i][sub.name] as number} />
 								{:else if sub.type === 'checkbox'}
@@ -217,6 +235,7 @@
 										value={rows[i][sub.name]}
 										{relOptions}
 										{mediaAspects}
+										{galleryLayouts}
 										submitHidden={false}
 										onChange={(v) => (rows[i][sub.name] = v)}
 									/>

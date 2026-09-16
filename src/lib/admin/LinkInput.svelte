@@ -107,10 +107,13 @@
 	</div>
 
 	{#if mode === 'internal' && relationTo.length > 0}
-		<div class="flex gap-2">
+		<!-- 1.7.1: the select must not carry inputCls's w-full (it won the cascade
+		     and shoved the picker outside the card inside block rows); wrap so a
+		     narrow row stacks instead of overflowing. -->
+		<div class="flex flex-wrap gap-2">
 			{#if relationTo.length > 1}
 				<select
-					class="{inputCls} w-auto"
+					class="{inputCls.replace('w-full ', '')} w-auto shrink-0"
 					value={targetCollection}
 					onchange={(e) => {
 						targetCollection = e.currentTarget.value;
@@ -121,7 +124,7 @@
 					{#each relationTo as slug (slug)}<option value={slug}>{slug}</option>{/each}
 				</select>
 			{/if}
-			<div class="min-w-0 flex-1">
+			<div class="min-w-[12rem] flex-1">
 				{#key targetCollection}
 					<RelationPicker
 						name="_link_{name}"
