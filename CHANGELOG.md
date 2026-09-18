@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.2 — 2026-09-18 · blocks inside richText get real editors
+
+- **Block nodes inside a richText field: `richText`, `array` and `link`
+  sub-fields get the real editors.** RichTextInput's block-node editor still
+  rendered a richText sub-field as a textarea (the 1.7.1 fix only covered
+  BlocksInput) and an `array` sub-field as a text input, so a `faq` block
+  (items array) or a `sectionImage` block (nested body) dropped into a body
+  could not be authored. Nested RichTextInput / BlocksInput / LinkInput in
+  callback mode, same as inside `blocks` rows. Found on PawScapes when the
+  landing `sectionImage` + `faq` blocks were allowed inside venue bodies
+  (content splitting).
+- **`richText` coercion recurses into block nodes' sub-fields** (as
+  `array`/`blocks` already did): a nested richText is sanitized server-side
+  (its inline HTML was passing through untouched), and nested arrays, links,
+  embeds and galleries get their JSON-string / upgrade paths.
+
 ## 1.7.1 — 2026-09-16 · richText inside blocks
 
 - **richText sub-fields inside `blocks` / `array` rows get the real editor.**

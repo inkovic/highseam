@@ -232,7 +232,20 @@ function coerce(field: Field, value: unknown): unknown {
 				}
 			}
 			// Sanitize inline HTML server-side; legacy markdown strings pass through.
-			return Array.isArray(v) ? sanitizeNodes(v) : v;
+			if (!Array.isArray(v)) return v;
+			// 1.7.2: recurse into block nodes' sub-fields (as array/blocks do) so a
+			// nested richText is sanitized and nested arrays/links/embeds get their
+			// upgrade paths — sanitizeNodes passes block fields through untouched.
+			return sanitizeNodes(v).map((node) => {
+				if (node.type !== 'block') return node;
+				const block = (field.blocks ?? []).find((b) => b.slug === node.blockType);
+				if (!block) return node;
+				const fields = { ...node.fields };
+				for (const sub of block.fields) {
+					if (sub.name in fields) fields[sub.name] = coerce(sub, fields[sub.name]);
+				}
+				return { ...node, fields };
+			});
 		}
 		case 'select':
 		case 'relationship':

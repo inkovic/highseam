@@ -12,6 +12,11 @@
 	import RelationPicker from './RelationPicker.svelte';
 	import GalleryInput from './GalleryInput.svelte';
 	import EmbedInput from './EmbedInput.svelte';
+	import LinkInput from './LinkInput.svelte';
+	// 1.7.2: block nodes' sub-fields get the real editors (nested rich text,
+	// repeaters, links) instead of a textarea / text input that stringified them.
+	import BlocksInput from './BlocksInput.svelte';
+	import RichTextInputSelf from './RichTextInput.svelte';
 	import { matchEmbedProvider } from '$lib/core/embed';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
@@ -843,7 +848,41 @@
 									{#each block.fields as sub (sub.name)}
 										<div>
 											<label class="mb-0.5 block text-[11px] font-medium text-(--color-muted)" for="{node._key}-{sub.name}">{sub.label}</label>
-											{#if sub.type === 'textarea' || sub.type === 'richText'}
+											{#if sub.type === 'richText'}
+												<!-- 1.7.2: a richText sub-field is a node array — the textarea
+												     showed "[object Object]" and saved a string over it. -->
+												<RichTextInputSelf
+													field={sub}
+													value={node.fields[sub.name]}
+													{relOptions}
+													{mediaAspects}
+													{galleryLayouts}
+													submitHidden={false}
+													showLabel={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+												/>
+											{:else if sub.type === 'array'}
+												<!-- 1.7.2: the repeater (FAQ items etc.), not a text input. -->
+												<BlocksInput
+													field={sub}
+													showLabel={false}
+													value={node.fields[sub.name]}
+													{relOptions}
+													{mediaAspects}
+													{galleryLayouts}
+													submitHidden={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+												/>
+											{:else if sub.type === 'link'}
+												<LinkInput
+													name="_rt_{sub.name}"
+													value={node.fields[sub.name]}
+													relationTo={sub.linkTo ?? []}
+													{relOptions}
+													submitHidden={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+												/>
+											{:else if sub.type === 'textarea'}
 												<textarea id="{node._key}-{sub.name}" rows="3" class={miniInput} bind:value={node.fields[sub.name] as string}></textarea>
 											{:else if sub.type === 'select'}
 												<select id="{node._key}-{sub.name}" class={miniInput} bind:value={node.fields[sub.name] as string}>
