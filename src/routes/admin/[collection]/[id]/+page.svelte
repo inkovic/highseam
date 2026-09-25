@@ -62,6 +62,61 @@
 		if (form?.saved && iframeEl) iframeEl.src = iframeEl.src;
 	});
 
+	// --- Preview pane (1.7.4) ---
+	// With the preview open the page is two panes: the form, and the preview at
+	// a width you drag (or arrow-key) on the divider, remembered per browser.
+	// "Phone" narrows the frame to 390px to check the mobile layout.
+	const paned = $derived(showPreview && !!data.previewUrl);
+	const PCT_KEY = 'highseam:preview-width';
+	const PCT_MIN = 25;
+	const PCT_MAX = 70;
+	const PCT_DEFAULT = 45;
+	let previewPct = $state(PCT_DEFAULT);
+	let phone = $state(false);
+	let dragging = $state(false);
+	let row: HTMLDivElement | undefined = $state();
+	$effect(() => {
+		try {
+			const v = Number(localStorage.getItem(PCT_KEY));
+			if (v >= PCT_MIN && v <= PCT_MAX) previewPct = v;
+		} catch {
+			/* storage blocked: keep the default */
+		}
+	});
+	function setPct(v: number, save = true) {
+		previewPct = Math.min(PCT_MAX, Math.max(PCT_MIN, v));
+		if (!save) return;
+		try {
+			localStorage.setItem(PCT_KEY, String(Math.round(previewPct)));
+		} catch {
+			/* storage blocked */
+		}
+	}
+	function startDrag(e: PointerEvent) {
+		dragging = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		e.preventDefault();
+	}
+	function onDrag(e: PointerEvent) {
+		if (!dragging || !row) return;
+		const r = row.getBoundingClientRect();
+		setPct(((r.right - e.clientX) / r.width) * 100, false);
+	}
+	function endDrag() {
+		if (!dragging) return;
+		dragging = false;
+		setPct(previewPct);
+	}
+	function nudge(e: KeyboardEvent) {
+		const step = e.shiftKey ? 10 : 5;
+		if (e.key === 'ArrowLeft') setPct(previewPct + step);
+		else if (e.key === 'ArrowRight') setPct(previewPct - step);
+		else if (e.key === 'Home') setPct(PCT_MAX);
+		else if (e.key === 'End') setPct(PCT_MIN);
+		else return;
+		e.preventDefault();
+	}
+
 	// Custom document actions (collection.admin.actions): POST {collection,id}
 	// to a consumer endpoint — the hook bus surfaced in the UI.
 	let runningAction = $state<string | null>(null);
@@ -203,37 +258,9 @@
 {/if}
 
 
-<div class="flex flex-wrap gap-10">
-	<div bind:this={formWrap} oninput={pushPreview} class="min-w-0 flex-1">
-		<DocForm
-			collection={data.collection}
-			values={data.doc}
-			relOptions={data.relOptions}
-			errors={form?.errors ?? {}}
-			message={form?.message}
-			submitLabel={data.collection.drafts ? 'Publish' : 'Save changes'}
-			action={(data.collection.drafts ? '?/publish' : '?/save') + localeSuffix}
-			draftAction={data.collection.drafts ? `?/saveDraft${localeSuffix}` : undefined}
-			autosave={data.collection.drafts}
-			mediaAspects={data.mediaAspects}
-			galleryLayouts={data.galleryLayouts}
-		/>
-	</div>
-
-	{#if showPreview && data.previewUrl}
-		<div class="min-w-80 flex-1 basis-[480px]">
-			<div class="sticky top-4">
-				<p class="mb-2 text-xs font-semibold tracking-widest text-(--color-muted) uppercase">Live preview</p>
-				<iframe
-					bind:this={iframeEl}
-					src={data.previewUrl}
-					title="Live preview"
-					class="h-[70vh] w-full resize-y rounded-(--radius) border border-(--color-border) bg-white"
-				></iframe>
-			</div>
-		</div>
-	{/if}
-
+<!-- Versions and media usage: side columns normally; under the form when the
+     preview pane is open. -->
+{#snippet sideInfo()}
 	{#if data.collection.upload}
 		{@const src = data.doc.source as Record<string, unknown> | undefined}
 		{@const first = data.doc.firstUsedIn as Record<string, unknown> | undefined}
@@ -307,5 +334,92 @@
 				{/each}
 			</ol>
 		</aside>
+	{/if}
+{/snippet}
+
+<!-- 1.7.4: the form keeps the same position in the tree whether or not the
+     preview is open, so toggling the preview never remounts it (unsaved edits
+     survive); only the row's layout changes. -->
+<div
+	bind:this={row}
+	class={paned ? 'flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-0' : 'flex flex-wrap gap-10'}
+>
+	<div bind:this={formWrap} oninput={pushPreview} class="min-w-0 flex-1">
+		<DocForm
+			collection={data.collection}
+			values={data.doc}
+			relOptions={data.relOptions}
+			errors={form?.errors ?? {}}
+			message={form?.message}
+			submitLabel={data.collection.drafts ? 'Publish' : 'Save changes'}
+			action={(data.collection.drafts ? '?/publish' : '?/save') + localeSuffix}
+			draftAction={data.collection.drafts ? `?/saveDraft${localeSuffix}` : undefined}
+			autosave={data.collection.drafts}
+			mediaAspects={data.mediaAspects}
+			galleryLayouts={data.galleryLayouts}
+		/>
+		{#if paned}
+			<div class="mt-10 flex flex-wrap gap-8">
+				{@render sideInfo()}
+			</div>
+		{/if}
+	</div>
+
+	{#if paned}
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+		<div
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize the preview"
+			aria-valuemin={PCT_MIN}
+			aria-valuemax={PCT_MAX}
+			aria-valuenow={Math.round(previewPct)}
+			tabindex="0"
+			title="Drag to resize · double-click to reset"
+			onpointerdown={startDrag}
+			onpointermove={onDrag}
+			onpointerup={endDrag}
+			onpointercancel={endDrag}
+			onkeydown={nudge}
+			ondblclick={() => setPct(PCT_DEFAULT)}
+			class="group hidden w-6 shrink-0 cursor-col-resize touch-none justify-center self-stretch focus:outline-none lg:flex"
+		>
+			<span
+				class="sticky top-4 h-[calc(100vh-2rem)] w-px transition-colors group-hover:bg-(--color-primary) group-focus-visible:bg-(--color-primary) {dragging
+					? 'bg-(--color-primary)'
+					: 'bg-(--color-border)'}"
+			></span>
+		</div>
+		<div class="min-w-0 lg:sticky lg:top-4 lg:w-(--pw) lg:shrink-0" style="--pw: {previewPct}%">
+			<div class="mb-2 flex items-center justify-between gap-2">
+				<p class="text-xs font-semibold tracking-widest text-(--color-muted) uppercase">Live preview</p>
+				<div role="group" aria-label="Preview width" class="flex overflow-hidden rounded-(--radius) border border-(--color-border) text-xs">
+					<button
+						type="button"
+						aria-pressed={!phone}
+						onclick={() => (phone = false)}
+						class="px-2.5 py-1 {phone ? 'text-(--color-muted) hover:text-(--color-fg)' : 'bg-(--color-elevate-2) text-(--color-fg)'}"
+					>Full width</button>
+					<button
+						type="button"
+						aria-pressed={phone}
+						onclick={() => (phone = true)}
+						class="border-l border-(--color-border) px-2.5 py-1 {phone ? 'bg-(--color-elevate-2) text-(--color-fg)' : 'text-(--color-muted) hover:text-(--color-fg)'}"
+					>Phone</button>
+				</div>
+			</div>
+			<div class="flex justify-center rounded-(--radius) {phone ? 'bg-(--color-elevate-2) py-3' : ''}">
+				<iframe
+					bind:this={iframeEl}
+					src={data.previewUrl}
+					title="Live preview"
+					class="h-[70vh] w-full rounded-(--radius) border border-(--color-border) bg-white lg:h-[calc(100vh-4.5rem)] {phone
+						? 'max-w-[390px]'
+						: ''} {dragging ? 'pointer-events-none' : ''}"
+				></iframe>
+			</div>
+		</div>
+	{:else}
+		{@render sideInfo()}
 	{/if}
 </div>
