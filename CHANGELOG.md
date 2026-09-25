@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.4 — 2026-09-25 · preview pane, full-screen editing, link editing, inline code toggle
+## 1.7.4 — 2026-09-25 · preview pane, full-screen editing, version compare, link editing, inline code toggle
 
 - **Live preview is a proper pane.** With the preview open, the document page
   is two panes: the form, and the preview at a width you set by dragging the
@@ -27,6 +27,19 @@
   key `highseam:preview-scroll:<path>`).
   Consumers: re-copy `routes/admin/[collection]/[id]/+page.svelte` from
   `templates/` for the pane layout; DocForm's change comes with the package.
+- **Compare versions.** The versions list shows which fields each save
+  changed, and "Compare" opens a review panel (Sanity-style): every kept
+  version on the left; on the right the selected version's changes field by
+  field, against the save before it or against the latest. Text shows a word
+  diff; richText and html a paragraph diff with the words marked inside
+  changed paragraphs (blocks as one line: type + text fields; link URLs
+  shown); other values before → after. Restore from the panel (confirms
+  first). Snapshots load on demand from the new
+  `admin/[collection]/[id]/versions` endpoint (signed in + update access),
+  two at a time, cached. Diffing lives in `admin/version-diff.ts` (Myers,
+  with a readability pass) and is unit-tested (`npm run test:diff`, now part
+  of `npm test`). Consumers: re-copy the `[id]` route folder from
+  `templates/` (page, page server, and the new `versions/+server.ts`).
 - **Links in rich text can be edited and removed.** The link button used
   `window.prompt`, which always opened empty, so a link could never be seen,
   changed or removed. A popover in the editor now adds a link to the

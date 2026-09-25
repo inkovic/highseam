@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { toClientCollection } from '$lib/admin/client';
 import { formToData } from '$lib/admin/form';
 import { loadRelOptions } from '$lib/admin/server';
+import { changedFields } from '$lib/admin/version-diff';
 import { APIError, ValidationError, type Doc } from '$lib/core/types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -29,12 +30,15 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			formDoc = draft;
 		}
 
-		let versions: { id: string; createdAt: string; status: string; title: string }[] = [];
+		let versions: { id: string; createdAt: string; status: string; title: string; changed: string[] | null }[] = [];
 		if (client.versioned) {
 			const list = await cms.findVersions({ user }, params.collection, params.id);
-			versions = list.slice(0, 15).map((v) => {
+			versions = list.slice(0, 15).map((v, i) => {
 				const snap = (v.snapshot ?? {}) as Doc;
 				const title = snap[client.useAsTitle];
+				// 1.7.4: which fields this save changed (vs the version before it);
+				// null for the oldest one kept, which has nothing to compare with.
+				const prev = list[i + 1]?.snapshot as Doc | undefined;
 				return {
 					id: v.id,
 					createdAt: String(v.createdAt ?? ''),
@@ -42,7 +46,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 					title:
 						title && typeof title === 'object'
 							? String(Object.values(title)[0] ?? '')
-							: String(title ?? snap.id ?? '')
+							: String(title ?? snap.id ?? ''),
+					changed: prev ? changedFields(client.fields, prev, snap) : null
 				};
 			});
 		}
