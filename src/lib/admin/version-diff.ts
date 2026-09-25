@@ -320,7 +320,11 @@ function display(v: unknown): string {
 	return String(v);
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/** Empty is empty: older snapshots store a cleared field as "" or [], newer
+ *  ones as null (or leave the key out), and none of that is an edit. */
+const blank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+const same = (a: unknown, b: unknown) =>
+	(blank(a) && blank(b)) || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** Per-field diffs from `before` to `after`, in field order; unchanged fields omitted. */
 export function diffDocs(fields: ClientField[], before: Doc, after: Doc): FieldDiff[] {
