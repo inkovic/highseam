@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.5 — 2026-09-25 · compare ignores empty-vs-null, Esc closes the link popover
+
+- **Compare versions no longer reports empty fields as changed.** Older
+  snapshots store a cleared field as `""` (or `[]`), newer ones as `null` or
+  no key, so a save could list "Published At, Updated on" as changed and the
+  panel showed "— → —". `undefined`, `null`, `""` and `[]` now count as the
+  same empty value, in both the list summaries (`changedFields`) and the
+  panel (`diffDocs`). `0` and `false` are still values. Found on real data.
+- **Esc closes the link popover wherever the focus is.** It only worked from
+  the URL box, so a popover opened by clicking a link (the caret stays in the
+  text) ignored Esc, and in full screen it held full screen open too, since
+  full screen's Esc waits for the popover. One Esc now closes the popover; the
+  next exits full screen.
+
+No template changes: consumers only bump the package.
+
 ## 1.7.4 — 2026-09-25 · preview pane, full-screen editing, version compare, link editing, inline code toggle
 
 - **Live preview is a proper pane.** With the preview open, the document page

@@ -91,6 +91,18 @@ console.log('\ndocs');
 	check('title is a word diff', d[1].kind, 'text');
 	check('number is before/after', [d[2].before, d[2].after], ['4', '5']);
 	check('changedFields', changedFields(fields, before, after), ['Status', 'Title', 'Rating']);
+	// 1.7.5: a cleared field stored as "" / [] in one snapshot and null / no key in another is not a change.
+	const old = { publishedAt: '', updated_on: '', tags: [], title: 'A' };
+	const neu = { publishedAt: null, updated_on: null, title: 'A' };
+	const dateFields = [
+		{ name: 'publishedAt', label: 'Published At', type: 'date' },
+		{ name: 'updated_on', label: 'Updated on', type: 'date' },
+		{ name: 'tags', label: 'Tags', type: 'json' },
+		{ name: 'title', label: 'Title', type: 'text' }
+	];
+	check('blank values are equal', changedFields(dateFields, old, neu), []);
+	check('blank → value still a change', changedFields(dateFields, old, { ...neu, publishedAt: '2026-06-19' }), ['Published At']);
+	check('0 and false are not blank', changedFields([{ name: 'n', label: 'N', type: 'number' }, { name: 'b', label: 'B', type: 'checkbox' }], { n: null, b: null }, { n: 0, b: false }), ['N', 'B']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -721,14 +721,26 @@
 		document.addEventListener('selectionchange', onSel);
 		return () => document.removeEventListener('selectionchange', onSel);
 	});
-	// Click outside the popover closes it (without applying).
+	// Click outside the popover, or Esc wherever the focus is, closes it
+	// (without applying). 1.7.5: Esc used to work only from the URL box, so a
+	// popover opened by clicking a link (focus stays in the text) ignored it —
+	// and held full screen open too, since that Esc waits for the popover.
 	$effect(() => {
 		if (!linkUi) return;
 		const onDown = (e: MouseEvent) => {
 			if (linkPop && !linkPop.contains(e.target as Node)) closeLink();
 		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			e.preventDefault(); // one Esc closes the popover, not full screen as well
+			closeLink(true);
+		};
 		window.addEventListener('mousedown', onDown);
-		return () => window.removeEventListener('mousedown', onDown);
+		window.addEventListener('keydown', onKey);
+		return () => {
+			window.removeEventListener('mousedown', onDown);
+			window.removeEventListener('keydown', onKey);
+		};
 	});
 	/** Clicking a link in the text shows its popover (the caret stays put). */
 	function onRootClick(e: MouseEvent) {
