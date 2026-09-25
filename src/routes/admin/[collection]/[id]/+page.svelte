@@ -5,6 +5,7 @@
 	import { displayValue } from '$lib/admin/client';
 	import { pushToast } from '$lib/admin/toast-store.svelte.js';
 	import { editorUi } from '$lib/admin/editor-ui.svelte.js';
+	import VersionCompare from '$lib/admin/VersionCompare.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -94,6 +95,14 @@
 			window.removeEventListener('highseam:autosaved', onAutosaved);
 		};
 	});
+
+	// --- Version compare (1.7.4) ---
+	let compareOpen = $state(false);
+	let compareStart = $state<string | null>(null);
+	function openCompare(id: string | null) {
+		compareStart = id;
+		compareOpen = true;
+	}
 
 	// --- Preview pane (1.7.4) ---
 	// With the preview open the page is two panes: the form, and the preview at
@@ -343,25 +352,30 @@
 
 	{#if data.collection.versioned && data.versions.length > 0}
 		<aside class="w-72 shrink-0">
-			<h2 class="mb-3 text-xs font-semibold tracking-widest text-(--color-muted) uppercase">
-				Versions
-			</h2>
+			<div class="mb-3 flex items-center justify-between gap-2">
+				<h2 class="text-xs font-semibold tracking-widest text-(--color-muted) uppercase">Versions</h2>
+				{#if data.versions.length > 1}
+					<button type="button" onclick={() => openCompare(null)} class="text-[11px] font-medium text-(--color-primary) hover:underline">Compare versions</button>
+				{/if}
+			</div>
 			<ol class="space-y-2">
 				{#each data.versions as v, i (v.id)}
-					<li class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2">
+					<li class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-3 py-2" title={v.title || undefined}>
 						<div class="flex items-center justify-between gap-2">
-							<span class="truncate text-xs text-(--color-fg)">{v.title || '—'}</span>
+							<span class="text-[11px] text-(--color-fg)">{displayValue(v.createdAt)}</span>
 							<span class="shrink-0 text-[10px] font-medium uppercase {v.status === 'published' ? 'text-(--color-success)' : 'text-(--color-muted)'}">{v.status}</span>
 						</div>
-						<div class="mt-1 flex items-center justify-between gap-2">
-							<span class="text-[11px] text-(--color-muted)">{displayValue(v.createdAt)}</span>
+						<!-- 1.7.4: what this save changed, at a glance -->
+						<p class="mt-0.5 truncate text-[11px] text-(--color-muted)">
+							{i === 0 ? 'Latest · ' : ''}{v.changed === null ? 'Oldest kept' : v.changed.length ? v.changed.join(', ') : 'No field changes'}
+						</p>
+						<div class="mt-1 flex items-center gap-3">
+							<button type="button" onclick={() => openCompare(v.id)} class="text-[11px] text-(--color-primary) hover:underline">Compare</button>
 							{#if i > 0}
 								<form method="POST" action="?/restore" use:enhance>
 									<input type="hidden" name="versionId" value={v.id} />
-									<button class="text-[11px] text-(--color-primary) hover:underline">Restore</button>
+									<button class="text-[11px] text-(--color-muted) hover:text-(--color-primary) hover:underline">Restore</button>
 								</form>
-							{:else}
-								<span class="text-[11px] text-(--color-muted)">latest</span>
 							{/if}
 						</div>
 					</li>
@@ -464,3 +478,13 @@
 		{@render sideInfo()}
 	{/if}
 </div>
+
+{#if data.collection.versioned && data.versions.length > 0}
+	<VersionCompare
+		bind:open={compareOpen}
+		startId={compareStart}
+		versions={data.versions}
+		fields={data.collection.fields}
+		endpoint="/admin/{data.collection.slug}/{data.doc.id}/versions"
+	/>
+{/if}
