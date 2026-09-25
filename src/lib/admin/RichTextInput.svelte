@@ -13,6 +13,7 @@
 	import GalleryInput from './GalleryInput.svelte';
 	import EmbedInput from './EmbedInput.svelte';
 	import LinkInput from './LinkInput.svelte';
+	import TagsInput from './TagsInput.svelte';
 	// 1.7.2: block nodes' sub-fields get the real editors (nested rich text,
 	// repeaters, links) instead of a textarea / text input that stringified them.
 	import BlocksInput from './BlocksInput.svelte';
@@ -54,6 +55,15 @@
 	function key(): string {
 		return crypto.randomUUID();
 	}
+
+	/** Block sub-field helpers (1.7.3), as in BlocksInput. */
+	function asDateInput(v: unknown): string {
+		const s = String(v ?? '');
+		if (!s) return '';
+		const d = new Date(s);
+		return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+	}
+	const isStructured = (v: unknown): boolean => v !== null && typeof v === 'object';
 
 	function initialNodes(): EditorNode[] {
 		let base: RichTextNode[];
@@ -882,6 +892,42 @@
 													submitHidden={false}
 													onChange={(v) => (node.fields[sub.name] = v)}
 												/>
+											{:else if sub.type === 'embed'}
+												<!-- 1.7.3: embed, gallery, date and tags sub-fields get the same
+												     editors as BlocksInput rows. They fell through to the text
+												     input, which showed "[object Object]", and typing in it
+												     replaced the stored value with a string. -->
+												<EmbedInput
+													name="_rt_{sub.name}"
+													value={node.fields[sub.name]}
+													submitHidden={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+												/>
+											{:else if sub.type === 'gallery'}
+												<GalleryInput
+													name="_rt_{sub.name}"
+													relationTo={sub.relationTo ?? ''}
+													value={node.fields[sub.name]}
+													submitHidden={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+													{mediaAspects}
+													maxItems={sub.maxItems}
+												/>
+											{:else if sub.type === 'date'}
+												<input
+													id="{node._key}-{sub.name}"
+													type="date"
+													class={miniInput}
+													value={asDateInput(node.fields[sub.name])}
+													onchange={(e) => (node.fields[sub.name] = e.currentTarget.value || null)}
+												/>
+											{:else if sub.type === 'json' && sub.admin?.editor === 'tags'}
+												<TagsInput
+													name="_rt_{sub.name}"
+													value={node.fields[sub.name]}
+													submitHidden={false}
+													onChange={(v) => (node.fields[sub.name] = v)}
+												/>
 											{:else if sub.type === 'textarea'}
 												<textarea id="{node._key}-{sub.name}" rows="3" class={miniInput} bind:value={node.fields[sub.name] as string}></textarea>
 											{:else if sub.type === 'select'}
@@ -907,6 +953,25 @@
 													editable={sub.type === 'upload'}
 													{mediaAspects}
 												/>
+											{:else if sub.type === 'blocks' || sub.type === 'json' || isStructured(node.fields[sub.name])}
+												<!-- Anything else holding an object or array (blocks, json, or
+												     a type added later) edits as JSON: never a text input that
+												     stringifies it. -->
+												<textarea
+													id="{node._key}-{sub.name}"
+													rows="4"
+													class="{miniInput} font-mono text-xs"
+													value={typeof node.fields[sub.name] === 'string'
+														? (node.fields[sub.name] as string)
+														: JSON.stringify(node.fields[sub.name] ?? (sub.type === 'json' ? {} : []), null, 1)}
+													onchange={(e) => {
+														try {
+															node.fields[sub.name] = JSON.parse(e.currentTarget.value);
+														} catch {
+															node.fields[sub.name] = e.currentTarget.value;
+														}
+													}}
+												></textarea>
 											{:else}
 												<input id="{node._key}-{sub.name}" type="text" class={miniInput} bind:value={node.fields[sub.name] as string} />
 											{/if}

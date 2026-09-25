@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.3 — 2026-09-25 · every block sub-field inside richText gets its editor
+
+- **Block nodes inside a richText field: `embed`, `gallery`, `date` and tags
+  (`json` with `admin.editor: 'tags'`) sub-fields get their editors**
+  (EmbedInput, GalleryInput, a date input, TagsInput), as BlocksInput rows
+  already did. They fell through to a text input, so a gallery block dropped
+  into a body showed `[object Object],[object Object]` for its images, and
+  typing in the box replaced the stored value with a string. Found on
+  PawScapes' Gallery and "Video / social embed" rich-text blocks.
+- **No text-input fallthrough for structured values.** A `blocks` or `json`
+  sub-field, or any sub-field whose value is an object or array (a type added
+  later), edits as JSON in a textarea, as in BlocksInput.
+
 ## 1.7.2 — 2026-09-18 · blocks inside richText get real editors
 
 - **Block nodes inside a richText field: `richText`, `array` and `link`
