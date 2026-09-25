@@ -4,6 +4,7 @@
 	import DocForm from '$lib/admin/DocForm.svelte';
 	import { displayValue } from '$lib/admin/client';
 	import { pushToast } from '$lib/admin/toast-store.svelte.js';
+	import { editorUi } from '$lib/admin/editor-ui.svelte.js';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -15,7 +16,22 @@
 	);
 
 	// --- Live preview ---
-	let showPreview = $state(false);
+	// Preview open / width live in editorUi (1.7.4) so a full-screen editor can
+	// sit beside the preview and toggle it. Closed on arrival, as before.
+	editorUi.previewOpen = false;
+	editorUi.fullscreen = null;
+	$effect(() => {
+		editorUi.previewAvailable = Boolean(data.previewUrl);
+	});
+	// Another document (same page component): leave full screen.
+	// svelte-ignore state_referenced_locally — seed once; the effect tracks changes
+	let lastDocId = data.doc.id;
+	$effect(() => {
+		if (data.doc.id !== lastDocId) {
+			lastDocId = data.doc.id;
+			editorUi.fullscreen = null;
+		}
+	});
 	let iframeEl: HTMLIFrameElement | undefined = $state();
 	let formWrap: HTMLDivElement | undefined = $state();
 	let previewReady = $state(false);
@@ -37,7 +53,7 @@
 	}
 	let pushTimer: ReturnType<typeof setTimeout> | undefined;
 	function pushPreview() {
-		if (!showPreview || !previewReady) return;
+		if (!editorUi.previewOpen || !previewReady) return;
 		clearTimeout(pushTimer);
 		pushTimer = setTimeout(() => {
 			iframeEl?.contentWindow?.postMessage(
@@ -61,33 +77,51 @@
 	$effect(() => {
 		if (form?.saved && iframeEl) iframeEl.src = iframeEl.src;
 	});
+	// 1.7.4: …and after each draft autosave (DocForm fires highseam:autosaved
+	// once the draft is stored), so a Mode A preview follows the typing.
+	let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const onAutosaved = () => {
+			if (!editorUi.previewOpen) return;
+			clearTimeout(reloadTimer);
+			reloadTimer = setTimeout(() => {
+				if (iframeEl) iframeEl.src = iframeEl.src;
+			}, 250);
+		};
+		window.addEventListener('highseam:autosaved', onAutosaved);
+		return () => {
+			clearTimeout(reloadTimer);
+			window.removeEventListener('highseam:autosaved', onAutosaved);
+		};
+	});
 
 	// --- Preview pane (1.7.4) ---
 	// With the preview open the page is two panes: the form, and the preview at
 	// a width you drag (or arrow-key) on the divider, remembered per browser.
 	// "Phone" narrows the frame to 390px to check the mobile layout.
-	const paned = $derived(showPreview && !!data.previewUrl);
+	const paned = $derived(editorUi.previewOpen && !!data.previewUrl);
+	/** A field is being edited full screen: the preview pins to the window's right. */
+	const pinned = $derived(paned && editorUi.fullscreen !== null);
 	const PCT_KEY = 'highseam:preview-width';
 	const PCT_MIN = 25;
 	const PCT_MAX = 70;
 	const PCT_DEFAULT = 45;
-	let previewPct = $state(PCT_DEFAULT);
 	let phone = $state(false);
 	let dragging = $state(false);
 	let row: HTMLDivElement | undefined = $state();
 	$effect(() => {
 		try {
 			const v = Number(localStorage.getItem(PCT_KEY));
-			if (v >= PCT_MIN && v <= PCT_MAX) previewPct = v;
+			if (v >= PCT_MIN && v <= PCT_MAX) editorUi.previewPct = v;
 		} catch {
 			/* storage blocked: keep the default */
 		}
 	});
 	function setPct(v: number, save = true) {
-		previewPct = Math.min(PCT_MAX, Math.max(PCT_MIN, v));
+		editorUi.previewPct = Math.min(PCT_MAX, Math.max(PCT_MIN, v));
 		if (!save) return;
 		try {
-			localStorage.setItem(PCT_KEY, String(Math.round(previewPct)));
+			localStorage.setItem(PCT_KEY, String(Math.round(editorUi.previewPct)));
 		} catch {
 			/* storage blocked */
 		}
@@ -105,12 +139,12 @@
 	function endDrag() {
 		if (!dragging) return;
 		dragging = false;
-		setPct(previewPct);
+		setPct(editorUi.previewPct);
 	}
 	function nudge(e: KeyboardEvent) {
 		const step = e.shiftKey ? 10 : 5;
-		if (e.key === 'ArrowLeft') setPct(previewPct + step);
-		else if (e.key === 'ArrowRight') setPct(previewPct - step);
+		if (e.key === 'ArrowLeft') setPct(editorUi.previewPct + step);
+		else if (e.key === 'ArrowRight') setPct(editorUi.previewPct - step);
 		else if (e.key === 'Home') setPct(PCT_MAX);
 		else if (e.key === 'End') setPct(PCT_MIN);
 		else return;
@@ -191,12 +225,12 @@
 		{#if data.previewUrl}
 			<button
 				type="button"
-				onclick={() => (showPreview = !showPreview)}
-				class="rounded-(--radius) border px-3 py-1.5 text-sm {showPreview
+				onclick={() => (editorUi.previewOpen = !editorUi.previewOpen)}
+				class="rounded-(--radius) border px-3 py-1.5 text-sm {editorUi.previewOpen
 					? 'border-(--color-primary) text-(--color-primary)'
 					: 'border-(--color-border) text-(--color-muted) hover:text-(--color-fg)'}"
 			>
-				{showPreview ? 'Hide preview' : 'Preview'}
+				{editorUi.previewOpen ? 'Hide preview' : 'Preview'}
 			</button>
 			<a href={data.previewUrl} target="_blank" rel="noopener" class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)" title="Open on site">↗</a>
 		{/if}
@@ -373,7 +407,7 @@
 			aria-label="Resize the preview"
 			aria-valuemin={PCT_MIN}
 			aria-valuemax={PCT_MAX}
-			aria-valuenow={Math.round(previewPct)}
+			aria-valuenow={Math.round(editorUi.previewPct)}
 			tabindex="0"
 			title="Drag to resize · double-click to reset"
 			onpointerdown={startDrag}
@@ -390,7 +424,14 @@
 					: 'bg-(--color-border)'}"
 			></span>
 		</div>
-		<div class="min-w-0 lg:sticky lg:top-4 lg:w-(--pw) lg:shrink-0" style="--pw: {previewPct}%">
+		<!-- Pinned (a field is full screen): fixed to the window's right edge at
+		     the same share of the window; the full-screen editor fills the rest. -->
+		<div
+			class={pinned
+				? 'fixed inset-y-0 right-0 z-50 flex flex-col bg-(--color-bg) px-3 pt-3 pb-3'
+				: 'min-w-0 lg:sticky lg:top-4 lg:w-(--pw) lg:shrink-0'}
+			style={pinned ? `width: ${editorUi.previewPct}vw;` : `--pw: ${editorUi.previewPct}%`}
+		>
 			<div class="mb-2 flex items-center justify-between gap-2">
 				<p class="text-xs font-semibold tracking-widest text-(--color-muted) uppercase">Live preview</p>
 				<div role="group" aria-label="Preview width" class="flex overflow-hidden rounded-(--radius) border border-(--color-border) text-xs">
@@ -408,12 +449,12 @@
 					>Phone</button>
 				</div>
 			</div>
-			<div class="flex justify-center rounded-(--radius) {phone ? 'bg-(--color-elevate-2) py-3' : ''}">
+			<div class="flex justify-center rounded-(--radius) {phone ? 'bg-(--color-elevate-2) py-3' : ''} {pinned ? 'min-h-0 flex-1' : ''}">
 				<iframe
 					bind:this={iframeEl}
 					src={data.previewUrl}
 					title="Live preview"
-					class="h-[70vh] w-full rounded-(--radius) border border-(--color-border) bg-white lg:h-[calc(100vh-4.5rem)] {phone
+					class="w-full rounded-(--radius) border border-(--color-border) bg-white {pinned ? 'h-full' : 'h-[70vh] lg:h-[calc(100vh-4.5rem)]'} {phone
 						? 'max-w-[390px]'
 						: ''} {dragging ? 'pointer-events-none' : ''}"
 				></iframe>

@@ -6,6 +6,7 @@
 	 * needs to be convenient, not trusted.
 	 */
 	import type { ClientField } from './client';
+	import { editorUi } from './editor-ui.svelte.js';
 
 	let { field, value = undefined }: { field: ClientField; value?: unknown } = $props();
 
@@ -25,10 +26,51 @@
 		document.execCommand(cmd, false, arg);
 		sync();
 	}
+	/** 1.7.4: shows the current link's URL (it opened empty, so a link could
+	 *  not be read or changed); clear it to remove the link. */
 	function addLink() {
-		const url = prompt('Link URL:');
-		if (url) exec('createLink', url);
+		const sel = window.getSelection();
+		const node = sel?.anchorNode ?? null;
+		const el = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
+		const a = el?.closest('a');
+		const current = a && surface?.contains(a) ? (a.getAttribute('href') ?? '') : '';
+		const url = prompt(current ? 'Link URL (clear it to remove the link):' : 'Link URL:', current);
+		if (url === null) return; // cancelled
+		if (!url.trim()) {
+			if (a) exec('unlink');
+		} else if (a && surface?.contains(a)) {
+			a.setAttribute('href', url.trim());
+			sync();
+			surface?.dispatchEvent(new Event('input', { bubbles: true }));
+		} else {
+			exec('createLink', url.trim());
+		}
 	}
+
+	// Full-screen editing (1.7.4): fills the window left of the live preview;
+	// Esc or Done exits. Restyled in place, so the hidden input keeps posting.
+	const isFull = $derived(editorUi.fullscreen === field.name);
+	function toggleFull() {
+		sync();
+		editorUi.fullscreen = isFull ? null : field.name;
+	}
+	$effect(() => {
+		if (!isFull) return;
+		const doc = document.documentElement;
+		const prev = doc.style.overflow;
+		doc.style.overflow = 'hidden';
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape' || e.defaultPrevented) return;
+			if (document.querySelector('[aria-modal="true"]')) return;
+			e.preventDefault();
+			editorUi.fullscreen = null;
+		};
+		window.addEventListener('keydown', onKey);
+		return () => {
+			doc.style.overflow = prev;
+			window.removeEventListener('keydown', onKey);
+		};
+	});
 	function toSource() {
 		sync();
 		mode = 'source';
@@ -55,8 +97,35 @@
 	];
 </script>
 
-<div class="space-y-1.5">
-	<label class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase" for={field.name}>
+<div
+	class={isFull
+		? 'fixed inset-y-0 left-0 z-50 m-0 overflow-y-auto border-r border-(--color-border) bg-(--color-bg) px-6 pb-24'
+		: 'space-y-1.5'}
+	style={isFull ? `right: ${editorUi.previewOpen ? editorUi.previewPct : 0}vw;` : undefined}
+>
+	{#if isFull}
+		<div class="sticky top-0 z-20 -mx-6 mb-4 flex h-14 items-center gap-3 border-b border-(--color-border) bg-(--color-bg)/95 px-6 backdrop-blur">
+			<span class="text-xs font-medium tracking-wide text-(--color-muted) uppercase">{field.label}</span>
+			<span class="text-xs text-(--color-muted)">Full screen · Esc to exit</span>
+			<span class="ml-auto flex items-center gap-2">
+				{#if editorUi.previewAvailable}
+					<button
+						type="button"
+						onclick={() => (editorUi.previewOpen = !editorUi.previewOpen)}
+						class="rounded-(--radius) border px-3 py-1.5 text-sm {editorUi.previewOpen
+							? 'border-(--color-primary) text-(--color-primary)'
+							: 'border-(--color-border) text-(--color-muted) hover:text-(--color-fg)'}"
+					>{editorUi.previewOpen ? 'Hide preview' : 'Show preview'}</button>
+				{/if}
+				<button
+					type="button"
+					onclick={toggleFull}
+					class="rounded-(--radius) bg-(--color-primary) px-4 py-1.5 text-sm font-semibold text-(--color-primary-fg) hover:opacity-90"
+				>Done</button>
+			</span>
+		</div>
+	{/if}
+	<label class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase {isFull ? 'hidden' : ''}" for={field.name}>
 		{field.label}
 		{#if field.required}<span class="text-(--color-primary)">*</span>{/if}
 		<span class="ml-1 font-normal normal-case opacity-60">(HTML)</span>
@@ -64,8 +133,8 @@
 
 	<input type="hidden" name={field.name} value={html} />
 
-	<div class="overflow-hidden rounded-(--radius) border border-(--color-border) bg-(--color-elevate)">
-		<div class="flex items-center gap-0.5 border-b border-(--color-border) px-2 py-1">
+	<div class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) {isFull ? 'mx-auto max-w-3xl overflow-clip' : 'overflow-hidden'}">
+		<div class="flex items-center gap-0.5 border-b border-(--color-border) px-2 py-1 {isFull ? 'sticky top-14 z-10 bg-(--color-elevate)' : ''}">
 			{#each tools as tool (tool.title)}
 				<button type="button" class={btn} title={tool.title} disabled={mode === 'source'} onmousedown={(e) => e.preventDefault()} onclick={tool.run}>
 					{tool.label}
@@ -74,6 +143,14 @@
 			<span class="ml-auto flex items-center gap-1">
 				<button type="button" class="{btn} {mode === 'visual' ? 'bg-(--color-elevate-2) text-(--color-fg)' : ''}" onclick={toVisual}>Visual</button>
 				<button type="button" class="{btn} {mode === 'source' ? 'bg-(--color-elevate-2) text-(--color-fg)' : ''}" onclick={toSource}>HTML</button>
+				<button
+					type="button"
+					class="{btn} ml-1"
+					title={isFull ? 'Exit full screen (Esc)' : 'Full screen, beside the preview'}
+					aria-pressed={isFull}
+					onmousedown={(e) => e.preventDefault()}
+					onclick={toggleFull}
+				>{isFull ? '⤡' : '⤢'}</button>
 			</span>
 		</div>
 
@@ -88,7 +165,7 @@
 					use:mounted={html}
 					oninput={sync}
 					style="background:var(--hs-canvas);color:var(--hs-canvas-fg);"
-					class="html-surface min-h-56 px-4 py-3 text-sm focus:outline-none"
+					class="html-surface px-4 py-3 text-sm focus:outline-none {isFull ? 'min-h-[calc(100vh-9rem)]' : 'min-h-56'}"
 				></div>
 			{/key}
 		{:else}
@@ -96,7 +173,7 @@
 				id={field.name}
 				rows="14"
 				bind:value={html}
-				class="block w-full resize-y bg-(--color-elevate-2) px-3 py-2 font-mono text-xs text-(--color-fg) focus:outline-none"
+				class="block w-full resize-y bg-(--color-elevate-2) px-3 py-2 font-mono text-xs text-(--color-fg) focus:outline-none {isFull ? 'min-h-[calc(100vh-9rem)]' : ''}"
 			></textarea>
 		{/if}
 	</div>

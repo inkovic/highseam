@@ -80,6 +80,8 @@
 				headers: { 'x-sveltekit-action': 'true' }
 			});
 			autosaveState = res.ok ? 'saved' : 'error';
+			// 1.7.4: the doc page reloads the live preview on this.
+			if (res.ok) window.dispatchEvent(new CustomEvent('highseam:autosaved'));
 		} catch {
 			autosaveState = 'error';
 		}
@@ -89,11 +91,15 @@
 	// Sidebar fields (admin.position: 'sidebar') split off into a meta column.
 	const sidebarFields = $derived(visibleFields.filter((f) => f.admin.position === 'sidebar'));
 	const mainFields = $derived(visibleFields.filter((f) => f.admin.position !== 'sidebar'));
-	// 1.7.4: the meta column follows the FORM's width (container query), not the
+	// 1.7.4: the meta column follows the FORM's measured width, not the
 	// viewport's. Beside a live preview the form is narrow, and a fixed 18rem
-	// column left the main fields a sliver. Below @3xl (48rem) the meta panel
-	// sits on top, collapsed to one line; it opens itself when a meta field has
-	// an error. Collapsed fields stay in the DOM, so they still submit.
+	// column left the main fields a sliver. Under 48rem the meta panel sits on
+	// top, collapsed to one line; it opens itself when a meta field has an
+	// error. Collapsed fields stay in the DOM, so they still submit.
+	// (Measured, not a CSS container query: container-type contains layout,
+	// which would trap the full-screen editors' position: fixed.)
+	let formWidth = $state<number | undefined>(undefined);
+	const wide = $derived((formWidth ?? 1200) >= 768);
 	let metaOpen = $state(false);
 	const metaErrors = $derived(sidebarFields.filter((f) => errors[f.name]).length);
 	$effect(() => {
@@ -205,8 +211,7 @@
 	};
 </script>
 
-<!-- The size container the form's layout queries (@3xl = 48rem of FORM width). -->
-<div class="@container {sidebarFields.length === 0 ? 'max-w-2xl' : ''}">
+<div bind:clientWidth={formWidth} class={sidebarFields.length === 0 ? 'max-w-2xl' : ''}>
 <form
 	method="POST"
 	{action}
@@ -215,7 +220,7 @@
 	bind:this={formEl}
 	oninput={onFormInput}
 	onsubmit={onSubmit}
-	class="flex flex-col gap-5 @3xl:flex-row @3xl:items-start @3xl:gap-8"
+	class="flex {wide ? 'flex-row items-start gap-8' : 'flex-col gap-5'}"
 >
 	{#snippet fieldRow(field: (typeof collection.fields)[number])}
 		{#if field.type === 'blocks' || field.type === 'array'}
@@ -232,7 +237,7 @@
 		{/if}
 	{/snippet}
 
-	<div class="order-2 min-w-0 flex-1 space-y-5 @3xl:order-1">
+	<div class="min-w-0 flex-1 space-y-5 {wide ? '' : 'order-2'}">
 	{#if collection.upload}
 		<div class="space-y-2">
 			{#if typeof values.url === 'string'}
@@ -400,14 +405,14 @@
 	</div>
 
 	{#if sidebarFields.length > 0}
-		<aside class="order-1 w-full shrink-0 @3xl:order-2 @3xl:w-72">
+		<aside class="shrink-0 {wide ? 'w-72' : 'order-1 w-full'}">
 			<div class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) p-4">
 				<!-- Narrow form: a one-line toggle. Wide form: a plain heading. -->
 				<button
 					type="button"
 					onclick={() => (metaOpen = !metaOpen)}
 					aria-expanded={metaOpen}
-					class="flex w-full items-center gap-2 text-left @3xl:hidden"
+					class="w-full items-center gap-2 text-left {wide ? 'hidden' : 'flex'}"
 				>
 					<span class="text-[10px] font-semibold tracking-widest text-(--color-muted) uppercase">Meta</span>
 					{#if metaErrors > 0}
@@ -416,8 +421,8 @@
 					{#if !metaOpen}<span class="min-w-0 truncate text-xs text-(--color-muted)">{metaSummary}</span>{/if}
 					<span class="ml-auto text-xs text-(--color-muted)" aria-hidden="true">{metaOpen ? '▾' : '▸'}</span>
 				</button>
-				<p class="hidden text-[10px] font-semibold tracking-widest text-(--color-muted) uppercase @3xl:block">Meta</p>
-				<div class="mt-4 space-y-5 {metaOpen ? '' : 'hidden'} @3xl:block">
+				<p class="text-[10px] font-semibold tracking-widest text-(--color-muted) uppercase {wide ? '' : 'hidden'}">Meta</p>
+				<div class="mt-4 space-y-5 {metaOpen || wide ? '' : 'hidden'}">
 					{#each sidebarFields as field (field.name)}
 						{@render fieldRow(field)}
 					{/each}
