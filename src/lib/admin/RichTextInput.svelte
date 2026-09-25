@@ -21,6 +21,7 @@
 	import { matchEmbedProvider } from '$lib/core/embed';
 	import type { ClientBlock, ClientField } from './client';
 	import type { RelOption } from './server';
+	import { editorUi } from './editor-ui.svelte.js';
 
 	type EditorNode = RichTextNode & { _key: string };
 	type TextNodeType = 'p' | 'h2' | 'h3' | 'quote';
@@ -598,7 +599,7 @@
 		linkHost = host;
 		const rel = (anchor?.getAttribute('rel') ?? '').split(/\s+/);
 		linkUi = {
-			top: box.bottom - base.top + 6,
+			top: box.bottom - base.top + root.scrollTop + 6, // root scrolls in full screen
 			left: Math.max(0, Math.min(box.left - base.left, base.width - 336)),
 			url: anchor?.getAttribute('href') ?? '',
 			newTab: anchor?.getAttribute('target') === '_blank',
@@ -739,6 +740,35 @@
 			openLink(a, null, host, false);
 		}
 	}
+	// --- Full-screen editing (1.7.4) -----------------------------------------
+	// Top-level editors only. The editor fills the window left of the live
+	// preview (editorUi.previewPct of the width while it's open); Esc or Done
+	// exits. It is restyled in place (position: fixed), never moved, so the
+	// form, autosave, ⌘S and the preview push all keep working.
+	const canFull = $derived(submitHidden);
+	const isFull = $derived(canFull && editorUi.fullscreen === field.name);
+	function toggleFull() {
+		closeLink();
+		editorUi.fullscreen = isFull ? null : field.name;
+	}
+	$effect(() => {
+		if (!isFull) return;
+		const html = document.documentElement;
+		const prev = html.style.overflow;
+		html.style.overflow = 'hidden';
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape' || e.defaultPrevented || linkUi || slashAt !== -1) return;
+			if (document.querySelector('[aria-modal="true"]')) return;
+			e.preventDefault();
+			editorUi.fullscreen = null;
+		};
+		window.addEventListener('keydown', onKey);
+		return () => {
+			html.style.overflow = prev;
+			window.removeEventListener('keydown', onKey);
+		};
+	});
+
 	/** ⌘K link, ⌘E inline code — in any text block or list item of this editor. */
 	function onRootKeydown(e: KeyboardEvent) {
 		if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
@@ -773,8 +803,39 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div bind:this={root} data-hs-rt class="relative space-y-1.5" onclick={onRootClick} onkeydown={onRootKeydown}>
-	{#if showLabel}
+<div
+	bind:this={root}
+	data-hs-rt
+	class={isFull
+		? 'fixed inset-y-0 left-0 z-50 m-0 overflow-y-auto border-r border-(--color-border) bg-(--color-bg) px-6 pb-24'
+		: 'relative space-y-1.5'}
+	style={isFull ? `right: ${editorUi.previewOpen ? editorUi.previewPct : 0}vw;` : undefined}
+	onclick={onRootClick}
+	onkeydown={onRootKeydown}
+>
+	{#if isFull}
+		<div class="sticky top-0 z-20 -mx-6 mb-4 flex h-14 items-center gap-3 border-b border-(--color-border) bg-(--color-bg)/95 px-6 backdrop-blur">
+			<span class="text-xs font-medium tracking-wide text-(--color-muted) uppercase">{field.label}</span>
+			<span class="text-xs text-(--color-muted)">Full screen · Esc to exit · autosaves as a draft</span>
+			<span class="ml-auto flex items-center gap-2">
+				{#if editorUi.previewAvailable}
+					<button
+						type="button"
+						onclick={() => (editorUi.previewOpen = !editorUi.previewOpen)}
+						class="rounded-(--radius) border px-3 py-1.5 text-sm {editorUi.previewOpen
+							? 'border-(--color-primary) text-(--color-primary)'
+							: 'border-(--color-border) text-(--color-muted) hover:text-(--color-fg)'}"
+					>{editorUi.previewOpen ? 'Hide preview' : 'Show preview'}</button>
+				{/if}
+				<button
+					type="button"
+					onclick={toggleFull}
+					class="rounded-(--radius) bg-(--color-primary) px-4 py-1.5 text-sm font-semibold text-(--color-primary-fg) hover:opacity-90"
+				>Done</button>
+			</span>
+		</div>
+	{/if}
+	{#if showLabel && !isFull}
 		<span class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase">
 			{field.label}
 			{#if field.required}<span class="text-(--color-primary)">*</span>{/if}
@@ -783,9 +844,10 @@
 
 	{#if submitHidden}<input type="hidden" name={field.name} value={serialized} />{/if}
 
-	<div class="overflow-hidden rounded-(--radius) border border-(--color-border) bg-(--color-elevate)">
-		<!-- inline formatting toolbar (applies to the focused text block) -->
-		<div class="flex items-center gap-0.5 border-b border-(--color-border) px-2 py-1">
+	<div class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) {isFull ? 'mx-auto max-w-3xl overflow-clip' : 'overflow-hidden'}">
+		<!-- inline formatting toolbar (applies to the focused text block);
+		     pinned under the full-screen header -->
+		<div class="flex items-center gap-0.5 border-b border-(--color-border) px-2 py-1 {isFull ? 'sticky top-14 z-10 bg-(--color-elevate)' : ''}">
 			<button type="button" class={tool(active.bold)} aria-pressed={active.bold} title="Bold (⌘B)" onmousedown={(e) => e.preventDefault()} onclick={() => exec('bold')}><strong>B</strong></button>
 			<button type="button" class={tool(active.italic)} aria-pressed={active.italic} title="Italic (⌘I)" onmousedown={(e) => e.preventDefault()} onclick={() => exec('italic')}><em>I</em></button>
 			<button type="button" class={tool(active.strike)} aria-pressed={active.strike} title="Strikethrough" onmousedown={(e) => e.preventDefault()} onclick={() => exec('strikeThrough')}><s>S</s></button>
@@ -800,6 +862,16 @@
 			<button type="button" class="{toolBtn} font-semibold" title="Heading 3 (⌘⌥3)" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('h3')}>H3</button>
 			<button type="button" class={toolBtn} title="Quote" onmousedown={(e) => e.preventDefault()} onclick={() => applyType('quote')}>❝</button>
 			<span class="ml-auto text-[10px] text-(--color-muted)">{nodes.length} nodes</span>
+			{#if canFull}
+				<button
+					type="button"
+					class="{toolBtn} ml-1"
+					title={isFull ? 'Exit full screen (Esc)' : 'Full screen, beside the preview'}
+					aria-pressed={isFull}
+					onmousedown={(e) => e.preventDefault()}
+					onclick={toggleFull}
+				>{isFull ? '⤡' : '⤢'}</button>
+			{/if}
 		</div>
 
 		<div class="divide-y divide-(--color-border)">

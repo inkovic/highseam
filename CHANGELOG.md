@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.4 — 2026-09-25 · preview pane, link editing, inline code toggle
+## 1.7.4 — 2026-09-25 · preview pane, full-screen editing, link editing, inline code toggle
 
 - **Live preview is a proper pane.** With the preview open, the document page
   is two panes: the form, and the preview at a width you set by dragging the
@@ -11,9 +11,20 @@
   left the main fields a sliver. Toggling the preview no longer remounts the
   form, so unsaved edits survive it.
 - **DocForm's meta column follows the form's width, not the viewport's**
-  (container query at 48rem). Narrower than that, the meta panel sits on top
-  as a one-line toggle listing its fields; it opens itself when a meta field
-  has an error. Collapsed fields stay in the DOM and still submit.
+  (measured with a size observer; under 48rem). Narrower than that, the meta
+  panel sits on top as a one-line toggle listing its fields; it opens itself
+  when a meta field has an error. Collapsed fields stay in the DOM and still
+  submit. (Not a CSS container query: `container-type` contains layout, which
+  traps `position: fixed` descendants such as the full-screen editors.)
+- **Full-screen editing beside the preview.** Top-level richText and html
+  fields get a ⤢ button: the editor fills the window left of the live
+  preview (same width split), with Show/Hide preview and Done; Esc exits. It
+  is restyled in place, never moved, so the form, autosave, ⌘S and the
+  preview push keep working. State shared via `admin/editor-ui.svelte.js`.
+- **The preview follows autosave.** DocForm fires `highseam:autosaved` after
+  a draft autosave; the doc page reloads the preview (Mode A). PreviewBanner
+  keeps the preview's scroll position across those reloads (sessionStorage,
+  key `highseam:preview-scroll:<path>`).
   Consumers: re-copy `routes/admin/[collection]/[id]/+page.svelte` from
   `templates/` for the pane layout; DocForm's change comes with the package.
 - **Links in rich text can be edited and removed.** The link button used
@@ -26,6 +37,8 @@
 - **`</>` toggles.** It unwraps inline code the selection touches instead of
   only ever wrapping (⌘E). Bold, italic, strike, code and link buttons light
   up while the caret is inside that format.
+- **HtmlInput's link prompt shows the current URL** (it opened empty); clear
+  it to remove the link.
 
 ## 1.7.3 — 2026-09-25 · every block sub-field inside richText gets its editor
 
