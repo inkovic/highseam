@@ -540,19 +540,225 @@
 	function exec(cmd: string, arg?: string) {
 		document.execCommand(cmd, false, arg);
 	}
-	function addLink() {
-		const url = prompt('Link URL:');
-		if (url) exec('createLink', url);
+	// --- Links and inline code (1.7.4) --------------------------------------
+	// The link button used window.prompt: always empty, so an existing link
+	// could not be seen, changed or removed, and </> only ever wrapped. Now a
+	// popover in the editor adds / edits / removes the link under the caret or
+	// selection (⌘K, or click a link in the text), and </> (⌘E) toggles.
+	// Every change dispatches `input` on the edited element so the node state,
+	// the form's dirty flag, autosave and the live preview all see it.
+
+	let root: HTMLDivElement | undefined = $state();
+	let linkPop: HTMLDivElement | undefined = $state();
+	let linkInput: HTMLInputElement | undefined = $state();
+	let linkUi = $state<{
+		top: number;
+		left: number;
+		url: string;
+		newTab: boolean;
+		nofollow: boolean;
+		existing: boolean;
+	} | null>(null);
+	// Plain refs (not reactive): the anchor being edited, or the saved range
+	// and its host for a new link.
+	let linkAnchor: HTMLAnchorElement | null = null;
+	let linkRange: Range | null = null;
+	let linkHost: HTMLElement | null = null;
+
+	/** The contenteditable holding `n`, if it belongs to THIS editor (nested
+	 *  editors inside block fields handle their own). */
+	function hostOf(n: Node | null): HTMLElement | null {
+		const el = n instanceof HTMLElement ? n : (n?.parentElement ?? null);
+		const host = el?.closest<HTMLElement>('[contenteditable="true"]') ?? null;
+		return host && host.closest('[data-hs-rt]') === root ? host : null;
 	}
+	function closestIn<T extends HTMLElement>(n: Node | null, selector: string, host: HTMLElement): T | null {
+		const el = n instanceof HTMLElement ? n : (n?.parentElement ?? null);
+		const hit = el?.closest<T>(selector) ?? null;
+		return hit && host.contains(hit) ? hit : null;
+	}
+	function commit(host: HTMLElement) {
+		host.dispatchEvent(new Event('input', { bubbles: true }));
+	}
+	function unwrap(el: HTMLElement) {
+		const parent = el.parentNode;
+		if (!parent) return;
+		while (el.firstChild) parent.insertBefore(el.firstChild, el);
+		parent.removeChild(el);
+		parent.normalize();
+	}
+
+	function openLink(anchor: HTMLAnchorElement | null, range: Range | null, host: HTMLElement, focus: boolean) {
+		if (!root) return;
+		const box = (anchor ?? range)?.getBoundingClientRect();
+		if (!box) return;
+		const base = root.getBoundingClientRect();
+		linkAnchor = anchor;
+		linkRange = range;
+		linkHost = host;
+		const rel = (anchor?.getAttribute('rel') ?? '').split(/\s+/);
+		linkUi = {
+			top: box.bottom - base.top + 6,
+			left: Math.max(0, Math.min(box.left - base.left, base.width - 336)),
+			url: anchor?.getAttribute('href') ?? '',
+			newTab: anchor?.getAttribute('target') === '_blank',
+			nofollow: rel.includes('nofollow'),
+			existing: Boolean(anchor)
+		};
+		if (focus) tick().then(() => linkInput?.focus());
+	}
+	function closeLink(refocus = false) {
+		const host = linkHost;
+		linkUi = null;
+		linkAnchor = null;
+		linkRange = null;
+		linkHost = null;
+		if (refocus) host?.focus();
+	}
+	/** Toolbar 🔗 / ⌘K: edit the link under the caret, or link the selection. */
+	function addLink() {
+		const sel = window.getSelection();
+		if (!sel || !sel.rangeCount) return;
+		const host = hostOf(sel.anchorNode);
+		if (!host) return;
+		const a = closestIn<HTMLAnchorElement>(sel.anchorNode, 'a', host) ?? closestIn<HTMLAnchorElement>(sel.focusNode, 'a', host);
+		if (a) return openLink(a, null, host, true);
+		if (sel.isCollapsed) return; // nothing selected to link
+		openLink(null, sel.getRangeAt(0).cloneRange(), host, true);
+	}
+	/** "example.com" → https://example.com; site paths, #, mailto: and tel: as typed. */
+	function normalizeUrl(v: string): string {
+		const u = v.trim();
+		if (!u || /^(https?:|mailto:|tel:|\/|#|\?)/i.test(u)) return u;
+		if (/^[\w-]+(\.[\w-]+)+([/?#]|$)/.test(u)) return `https://${u}`;
+		return u;
+	}
+	function applyLink() {
+		if (!linkUi || !linkHost) return;
+		const url = normalizeUrl(linkUi.url);
+		if (!url) return removeLink();
+		if (/^\s*(javascript|data|vbscript):/i.test(url)) return; // the server strips these too
+		let a = linkAnchor;
+		if (!a && linkRange) {
+			a = document.createElement('a');
+			a.appendChild(linkRange.extractContents());
+			a.querySelectorAll('a').forEach((inner) => unwrap(inner)); // no links inside links
+			linkRange.insertNode(a);
+		}
+		if (!a) return;
+		a.setAttribute('href', url);
+		if (linkUi.newTab) a.setAttribute('target', '_blank');
+		else a.removeAttribute('target');
+		// Keep any other rel tokens (sponsored, ugc…); set nofollow / noopener.
+		const rel = new Set((a.getAttribute('rel') ?? '').split(/\s+/).filter(Boolean));
+		rel.delete('nofollow');
+		rel.delete('noopener');
+		if (linkUi.nofollow) rel.add('nofollow');
+		if (linkUi.newTab) rel.add('noopener');
+		if (rel.size) a.setAttribute('rel', [...rel].join(' '));
+		else a.removeAttribute('rel');
+		const host = linkHost;
+		commit(host);
+		closeLink();
+		// Caret just after the link, so typing carries on outside it.
+		const sel = window.getSelection();
+		const after = document.createRange();
+		after.setStartAfter(a);
+		after.collapse(true);
+		host.focus();
+		sel?.removeAllRanges();
+		sel?.addRange(after);
+	}
+	function removeLink() {
+		const host = linkHost;
+		if (linkAnchor && host) {
+			unwrap(linkAnchor);
+			commit(host);
+		}
+		closeLink(true);
+	}
+	/** </> / ⌘E: unwrap inline code the selection touches, or wrap the selection. */
 	function inlineCode() {
-		const sel = window.getSelection()?.toString();
-		if (sel) exec('insertHTML', `<code>${sel.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</code>`);
+		const sel = window.getSelection();
+		if (!sel || !sel.rangeCount) return;
+		const host = hostOf(sel.anchorNode);
+		if (!host) return;
+		const range = sel.getRangeAt(0);
+		const touched = [...host.querySelectorAll('code')].filter((c) => range.intersectsNode(c));
+		const around = closestIn<HTMLElement>(sel.anchorNode, 'code', host);
+		if (around && !touched.includes(around)) touched.push(around);
+		if (touched.length) {
+			touched.forEach((c) => unwrap(c));
+			commit(host);
+			return;
+		}
+		const text = sel.toString();
+		if (text) exec('insertHTML', `<code>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</code>`);
+	}
+
+	/** Toolbar state: which inline formats the caret sits in. */
+	let active = $state({ bold: false, italic: false, strike: false, code: false, link: false });
+	$effect(() => {
+		const onSel = () => {
+			const sel = window.getSelection();
+			const host = sel && sel.rangeCount ? hostOf(sel.anchorNode) : null;
+			if (!host) {
+				if (active.bold || active.italic || active.strike || active.code || active.link)
+					active = { bold: false, italic: false, strike: false, code: false, link: false };
+				return;
+			}
+			// From the tags, not queryCommandState (which calls a heading bold).
+			const n = sel!.anchorNode;
+			active = {
+				bold: Boolean(closestIn(n, 'strong, b', host)),
+				italic: Boolean(closestIn(n, 'em, i', host)),
+				strike: Boolean(closestIn(n, 's, strike, del', host)),
+				code: Boolean(closestIn(n, 'code', host)),
+				link: Boolean(closestIn(n, 'a', host))
+			};
+		};
+		document.addEventListener('selectionchange', onSel);
+		return () => document.removeEventListener('selectionchange', onSel);
+	});
+	// Click outside the popover closes it (without applying).
+	$effect(() => {
+		if (!linkUi) return;
+		const onDown = (e: MouseEvent) => {
+			if (linkPop && !linkPop.contains(e.target as Node)) closeLink();
+		};
+		window.addEventListener('mousedown', onDown);
+		return () => window.removeEventListener('mousedown', onDown);
+	});
+	/** Clicking a link in the text shows its popover (the caret stays put). */
+	function onRootClick(e: MouseEvent) {
+		const host = hostOf(e.target as Node);
+		if (!host) return;
+		const a = closestIn<HTMLAnchorElement>(e.target as Node, 'a', host);
+		if (a) {
+			e.preventDefault();
+			openLink(a, null, host, false);
+		}
+	}
+	/** ⌘K link, ⌘E inline code — in any text block or list item of this editor. */
+	function onRootKeydown(e: KeyboardEvent) {
+		if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+		if (!hostOf(e.target as Node)) return;
+		const k = e.key.toLowerCase();
+		if (k === 'k') {
+			e.preventDefault();
+			addLink();
+		} else if (k === 'e') {
+			e.preventDefault();
+			inlineCode();
+		}
 	}
 
 	const ceClass =
 		'min-h-[1.5rem] w-full px-3 py-2 text-(--color-fg) focus:outline-none [&_a]:text-(--color-primary) [&_a]:underline [&_code]:rounded [&_code]:bg-(--color-elevate-2) [&_code]:px-1 [&_code]:text-[0.85em]';
-	const toolBtn =
-		'rounded px-2 py-1 text-xs font-medium text-(--color-muted) hover:bg-(--color-elevate-2) hover:text-(--color-fg)';
+	const toolBase = 'rounded px-2 py-1 text-xs font-medium hover:bg-(--color-elevate-2) hover:text-(--color-fg)';
+	const toolBtn = `${toolBase} text-(--color-muted)`;
+	/** Inline-format buttons: lit while the caret is inside that format. */
+	const tool = (on: boolean) => `${toolBase} ${on ? 'bg-(--color-elevate-2) text-(--color-primary)' : 'text-(--color-muted)'}`;
 	const miniInput =
 		'w-full rounded-(--radius) border border-(--color-border) bg-(--color-bg) px-2.5 py-1.5 text-sm text-(--color-fg) focus:border-(--color-primary) focus:outline-none';
 	const ctl =
@@ -566,7 +772,8 @@
 	}
 </script>
 
-<div class="space-y-1.5">
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div bind:this={root} data-hs-rt class="relative space-y-1.5" onclick={onRootClick} onkeydown={onRootKeydown}>
 	{#if showLabel}
 		<span class="block text-xs font-medium tracking-wide text-(--color-muted) uppercase">
 			{field.label}
@@ -579,11 +786,11 @@
 	<div class="overflow-hidden rounded-(--radius) border border-(--color-border) bg-(--color-elevate)">
 		<!-- inline formatting toolbar (applies to the focused text block) -->
 		<div class="flex items-center gap-0.5 border-b border-(--color-border) px-2 py-1">
-			<button type="button" class={toolBtn} title="Bold" onmousedown={(e) => e.preventDefault()} onclick={() => exec('bold')}><strong>B</strong></button>
-			<button type="button" class={toolBtn} title="Italic" onmousedown={(e) => e.preventDefault()} onclick={() => exec('italic')}><em>I</em></button>
-			<button type="button" class={toolBtn} title="Strikethrough" onmousedown={(e) => e.preventDefault()} onclick={() => exec('strikeThrough')}><s>S</s></button>
-			<button type="button" class={toolBtn} title="Inline code" onmousedown={(e) => e.preventDefault()} onclick={inlineCode}>{'</>'}</button>
-			<button type="button" class={toolBtn} title="Link" onmousedown={(e) => e.preventDefault()} onclick={addLink}>🔗</button>
+			<button type="button" class={tool(active.bold)} aria-pressed={active.bold} title="Bold (⌘B)" onmousedown={(e) => e.preventDefault()} onclick={() => exec('bold')}><strong>B</strong></button>
+			<button type="button" class={tool(active.italic)} aria-pressed={active.italic} title="Italic (⌘I)" onmousedown={(e) => e.preventDefault()} onclick={() => exec('italic')}><em>I</em></button>
+			<button type="button" class={tool(active.strike)} aria-pressed={active.strike} title="Strikethrough" onmousedown={(e) => e.preventDefault()} onclick={() => exec('strikeThrough')}><s>S</s></button>
+			<button type="button" class={tool(active.code)} aria-pressed={active.code} title="Inline code (⌘E) — again to remove" onmousedown={(e) => e.preventDefault()} onclick={inlineCode}>{'</>'}</button>
+			<button type="button" class={tool(active.link)} aria-pressed={active.link} title="Link (⌘K) — select text, or put the caret in a link to edit it" onmousedown={(e) => e.preventDefault()} onclick={addLink}>🔗</button>
 			<span class="mx-1 h-4 w-px bg-(--color-border)"></span>
 			<!-- Block type: applies to the selection (splitting the node if it's a
 			     sub-range) or to the focused node. mousedown-preventDefault keeps
@@ -1002,6 +1209,56 @@
 
 	{#if field.admin.description}
 		<p class="text-xs text-(--color-muted)">{field.admin.description}</p>
+	{/if}
+	{#if linkUi}
+		<!-- Link popover (1.7.4). Enter applies, Esc cancels; the inputs have no
+		     name, so they never submit with the form. -->
+		<div
+			bind:this={linkPop}
+			role="dialog"
+			aria-label={linkUi.existing ? 'Edit link' : 'Add link'}
+			class="absolute z-30 w-[21rem] max-w-full rounded-(--radius) border border-(--color-border) bg-(--color-bg) p-2.5 shadow-xl"
+			style="top: {linkUi.top}px; left: {linkUi.left}px;"
+		>
+			<div class="flex gap-1.5">
+				<input
+					bind:this={linkInput}
+					bind:value={linkUi.url}
+					type="text"
+					inputmode="url"
+					spellcheck="false"
+					placeholder="https://…, /page, #section or mailto:"
+					aria-label="Link URL"
+					class={miniInput}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							applyLink();
+						} else if (e.key === 'Escape') {
+							e.preventDefault();
+							closeLink(true);
+						}
+					}}
+				/>
+				<button
+					type="button"
+					onclick={applyLink}
+					class="shrink-0 rounded-(--radius) bg-(--color-primary) px-3 text-xs font-semibold text-(--color-primary-fg) hover:opacity-90"
+				>{linkUi.existing ? 'Save' : 'Add'}</button>
+			</div>
+			<div class="mt-2 flex items-center gap-3 text-xs text-(--color-muted)">
+				<label class="flex items-center gap-1"><input type="checkbox" bind:checked={linkUi.newTab} class="accent-(--color-primary)" /> New tab</label>
+				<label class="flex items-center gap-1" title="rel=&quot;nofollow&quot;: no ranking credit to the target"><input type="checkbox" bind:checked={linkUi.nofollow} class="accent-(--color-primary)" /> nofollow</label>
+				{#if linkUi.existing}
+					<span class="ml-auto flex items-center gap-3">
+						{#if /^https?:\/\//i.test(linkUi.url)}
+							<a href={linkUi.url} target="_blank" rel="noopener noreferrer" class="hover:text-(--color-fg)">Open ↗</a>
+						{/if}
+						<button type="button" onclick={removeLink} class="text-(--color-danger) hover:underline">Remove link</button>
+					</span>
+				{/if}
+			</div>
+		</div>
 	{/if}
 </div>
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.7.4 — 2026-09-25 · preview pane, link editing, inline code toggle
+
+- **Live preview is a proper pane.** With the preview open, the document page
+  is two panes: the form, and the preview at a width you set by dragging the
+  divider (or arrow keys on it; double-click resets), remembered per browser.
+  A "Phone" toggle narrows the frame to 390px. Versions and media usage move
+  under the form. Before, form, preview and versions shared one flex row: the
+  preview started at 480px and grew, and the form's fixed 18rem meta column
+  left the main fields a sliver. Toggling the preview no longer remounts the
+  form, so unsaved edits survive it.
+- **DocForm's meta column follows the form's width, not the viewport's**
+  (container query at 48rem). Narrower than that, the meta panel sits on top
+  as a one-line toggle listing its fields; it opens itself when a meta field
+  has an error. Collapsed fields stay in the DOM and still submit.
+  Consumers: re-copy `routes/admin/[collection]/[id]/+page.svelte` from
+  `templates/` for the pane layout; DocForm's change comes with the package.
+- **Links in rich text can be edited and removed.** The link button used
+  `window.prompt`, which always opened empty, so a link could never be seen,
+  changed or removed. A popover in the editor now adds a link to the
+  selection, or edits the link under the caret (⌘K, or click a link in the
+  text): URL, new tab, nofollow, Open ↗, Remove link. Bare domains get
+  `https://`; `javascript:` / `data:` are refused (the server strips them
+  too). Works in list items; nested editors in block fields handle their own.
+- **`</>` toggles.** It unwraps inline code the selection touches instead of
+  only ever wrapping (⌘E). Bold, italic, strike, code and link buttons light
+  up while the caret is inside that format.
+
 ## 1.7.3 — 2026-09-25 · every block sub-field inside richText gets its editor
 
 - **Block nodes inside a richText field: `embed`, `gallery`, `date` and tags
