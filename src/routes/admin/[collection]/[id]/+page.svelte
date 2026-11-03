@@ -196,7 +196,9 @@
 			? 'Published'
 			: form.draft
 				? 'Draft saved — published version unchanged'
-				: form.unpublished
+				: form.discarded
+					? 'Draft discarded — showing the published version'
+					: form.unpublished
 					? 'Unpublished'
 					: form.restored
 						? 'Version restored'
@@ -270,6 +272,21 @@
 				{/if}
 			</button>
 		{/each}
+		{#if data.collection.drafts && data.hasDraftChanges}
+			<form
+				method="POST"
+				action="?/discardDraft"
+				use:enhance
+				onsubmit={(e) => {
+					if (!confirm('Discard this draft? Your unpublished changes are thrown away; the published version stays as it is.'))
+						e.preventDefault();
+				}}
+			>
+				<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">
+					Discard draft
+				</button>
+			</form>
+		{/if}
 		{#if data.collection.drafts && data.liveStatus === 'published'}
 			<form method="POST" action="?/unpublish" use:enhance>
 				<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">

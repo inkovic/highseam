@@ -1,6 +1,6 @@
 {
 	"name": "highseam",
-	"version": "1.7.5",
+	"version": "1.8.0",
 	"description": "Config-driven CMS for SvelteKit that runs at the edge and sits on top of the database you already have. One cms.config.ts generates the data layer (schema-less or your existing D1 tables), REST + GraphQL APIs, and a full admin panel — drafts, localization, structured rich text, and a focal-point-aware media library included. Node + Cloudflare Workers (D1 + R2).",
 	"license": "MIT",
 	"repository": {
@@ -70,7 +70,8 @@
 		"test:richtext": "node scripts/test-richtext-split.mjs",
 		"test:media": "node --experimental-strip-types scripts/test-media.mjs",
 		"test:diff": "node --experimental-strip-types scripts/test-diff.mjs",
-		"test": "npm run test:richtext && npm run test:media && npm run test:diff",
+		"test:drafts": "npx -y tsx scripts/test-table-drafts.mjs",
+		"test": "npm run test:richtext && npm run test:media && npm run test:diff && npm run test:drafts",
 		"package": "svelte-kit sync && svelte-package -o dist && node scripts/build-templates.js",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.8.0 — 2026-11-03 · field-scoped drafts for table-backed collections
+
+- **Drafts on table-backed collections carry only the fields they edit.**
+  Until now a draft was a full copy of the document, and Publish copied it
+  back over the row. That is right for document-mode collections, which only
+  the CMS writes. Table-backed collections usually share their table with
+  other writers (pipelines, imports, SQL backfills), so publishing a week-old
+  draft silently undid whatever those wrote in between. Now, for a collection
+  with both `table` and `versions: { drafts: true }`:
+  - a draft save records which fields differ from the live row
+    (`_draftFields` in the version snapshot; empty-vs-null and object key
+    order are not edits, same rule as compare, and an unticked checkbox over
+    a NULL column is not an edit either, so "unknown" survives a publish);
+  - draft reads (`findByID(…, { draft: true })`, the editor, previews) show
+    the current row with those fields on top; with no open draft they show
+    the row itself, not the last snapshot;
+  - Publish writes only those fields plus `_status`, and validates the row as
+    it will be after publishing.
+  Partial draft saves (`PATCH /api/:collection/:id?draft=true`) accumulate;
+  setting a field back to the live value drops it from the draft. Version
+  history and Compare still store full snapshots. Restore still writes a whole
+  snapshot back (an explicit choice). Drafts saved before 1.8.0 have no edit
+  list and are treated as full copies. Document mode is unchanged.
+- **Discard draft.** `cms.discardDraft(req, slug, id)` throws away the open
+  draft: the live doc becomes the latest version again, nothing is written to
+  the doc. The editor shows a "Discard draft" button (with a confirm) while
+  there are unpublished changes. Every collection with drafts, not only table
+  mode. Before, the only way out of a draft was restoring an old version.
+- **Table mode with drafts needs a `_status` column** on the table (as
+  before): `ALTER TABLE <t> ADD COLUMN _status TEXT NOT NULL DEFAULT 'published'`.
+- **Index for version lookups.** The D1 adapter now creates
+  `documents_parent ON documents (collection, json_extract(data, '$.parent'), created_at)`
+  at init. Latest-version, history and prune queries filtered on the parent
+  with a scan of every snapshot in the collection. On a large live database,
+  run that `CREATE INDEX IF NOT EXISTS` yourself at a quiet moment first.
+- `npm test` includes `test:drafts` (field-scoped drafts against the memory
+  adapter; runs through `npx tsx`).
+
+### Stub changes
+- `routes/admin/[collection]/[id]/+page.server.ts`: new `discardDraft`
+  action. `+page.svelte`: "Discard draft" button and its toast.
+- `routes/admin/[collection]/[id]/+page.server.ts`: "Unpublished changes"
+  also shows when a draft is pending over a published doc (in table mode the
+  row's `updatedAt` moves with outside writes, so the timestamp test alone
+  missed it). `npx highseam-init --check-stubs` lists the line.
+
 ## 1.7.5 — 2026-09-25 · compare ignores empty-vs-null, Esc closes the link popover
 
 - **Compare versions no longer reports empty fields as changed.** Older
