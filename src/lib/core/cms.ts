@@ -324,6 +324,16 @@ export class CMS {
 		};
 	}
 
+	/**
+	 * Field-scoped drafts (1.8.0): on for table-backed collections. Their rows
+	 * are usually written by other code too (pipelines, SQL), so a draft holds
+	 * only the fields it edits, layered over the current row on read and on
+	 * Publish, instead of a full copy that would undo those writes.
+	 */
+	private fieldScopedDrafts(col: CollectionConfig): boolean {
+		return Boolean(col.table) && Boolean(this.versionsConfig(col)?.drafts);
+	}
+
 	private async snapshotVersion(col: CollectionConfig, doc: Doc): Promise<void> {
 		const vcfg = this.versionsConfig(col);
 		if (!vcfg) return;
@@ -432,7 +442,13 @@ export class CMS {
 				if (!access.allowed) throw new APIError('Forbidden', 403);
 			}
 			const latest = await this.latestVersion(slug, id);
-			if (latest && latest.snapshot) doc = { ...latest.snapshot, id };
+			if (this.fieldScopedDrafts(col)) {
+				// Table mode (1.8.0): the live row plus the draft's edited fields.
+				// No open draft = the live row itself; a published snapshot may
+				// predate writes made to the table outside the CMS.
+				const pending = openDraft(latest);
+				if (pending) doc = layerDraft(doc, pending);
+			} else if (latest && latest.snapshot) doc = { ...latest.snapshot, id };
 			return this.afterRead(req, col, doc, opts.depth ?? 1, locale);
 		}
 
@@ -887,6 +903,33 @@ export class CMS {
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, originalDoc);
 
 		// Draft save: snapshot a version, leave the live document untouched.
+		if (opts.draft && this.versionsConfig(col)?.drafts && this.fieldScopedDrafts(col)) {
+			// Table mode (1.8.0): the draft records which fields differ from the
+			// live row, so reads and Publish layer only those over the row and
+			// never undo writes made to the table outside the CMS meanwhile.
+			const now = new Date().toISOString();
+			const live = stripMeta(originalDoc);
+			const prev = openDraft(await this.latestVersion(slug, id));
+			const prevEdits = prev ? pick(prev, draftFieldsOf(prev) ?? fieldNames(col)) : {};
+			const wanted = { ...live, ...prevEdits, ...this.wrapLocalized(col, data, locale, live) };
+			const edited = col.fields
+				.filter((f) => f.name in wanted && !sameFieldValue(f, wanted[f.name], live[f.name]))
+				.map((f) => f.name);
+			const draftDoc: Doc = {
+				...live,
+				...pick(wanted, edited),
+				[DRAFT_FIELDS]: edited,
+				_status: 'draft',
+				id,
+				createdAt: originalDoc.createdAt,
+				updatedAt: now
+			};
+			await this.snapshotVersion(col, draftDoc);
+			const { [DRAFT_FIELDS]: _f, ...shown } = draftDoc;
+			for (const hook of col.hooks?.afterChange ?? [])
+				await hook({ req, operation: 'update', collection: slug, doc: shown as Doc, data, originalDoc });
+			return this.afterRead(req, col, shown as Doc, opts.depth ?? 1, locale);
+		}
 		if (opts.draft && this.versionsConfig(col)?.drafts) {
 			const now = new Date().toISOString();
 			const base = { ...stripMeta(originalDoc), ...(await this.draftBase(col, slug, id)) };
@@ -965,12 +1008,27 @@ export class CMS {
 		}
 
 		const latest = await this.latestVersion(slug, id);
-		const source = latest?.snapshot ? { ...stripMeta(latest.snapshot as Doc) } : stripMeta(doc);
-		let data: Record<string, unknown> = { ...source, _status: 'published' };
+		let data: Record<string, unknown>;
+		if (this.fieldScopedDrafts(col)) {
+			// Table mode (1.8.0): write only the draft's edited fields (none when
+			// there is no open draft), so the row keeps every value written
+			// outside the CMS since the draft began.
+			const pending = openDraft(latest);
+			const fields = pending ? (draftFieldsOf(pending) ?? fieldNames(col)) : [];
+			data = { ...(pending ? pick(pending, fields) : {}), _status: 'published' };
+		} else {
+			const source = latest?.snapshot ? { ...stripMeta(latest.snapshot as Doc) } : stripMeta(doc);
+			data = { ...source, _status: 'published' };
+		}
+		delete data[DRAFT_FIELDS];
 		data = await this.runDataHooks(col, 'beforeValidate', req, 'update', data, doc);
 		data = await this.resolveEmbeds(col, data);
-		// Stored localized values are per-locale objects; validate a flattened view.
-		validateData(col, this.flattenLocalized(col, data as Doc, this.resolveLocale({})));
+		// Stored localized values are per-locale objects; validate a flattened view
+		// of the row as it will be after publishing.
+		validateData(
+			col,
+			this.flattenLocalized(col, { ...stripMeta(doc), ...data } as Doc, this.resolveLocale({}))
+		);
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, doc);
 
 		const updated = await this.db.update(slug, id, data);
@@ -978,6 +1036,25 @@ export class CMS {
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc: updated, data, originalDoc: doc });
 		return this.afterRead(req, col, updated, opts.depth ?? 1, this.resolveLocale(opts));
+	}
+
+	/**
+	 * Throw away the open draft (1.8.0): the live doc becomes the latest version
+	 * again, so the editor and previews show it. Writes nothing to the doc
+	 * itself. No open draft = no-op.
+	 */
+	async discardDraft(req: ReqContext, slug: string, id: string, opts: OperationOptions = {}): Promise<Doc> {
+		await this.init();
+		const col = this.collection(slug);
+		if (!this.versionsConfig(col)?.drafts) throw new APIError(`Collection ${slug} has no drafts`, 400);
+		const doc = await this.db.findById(slug, id);
+		if (!doc) throw new APIError('Not found', 404);
+		if (!opts.overrideAccess) {
+			const access = await this.evalAccess(col, 'update', { req, id, doc });
+			if (!access.allowed) throw new APIError('Forbidden', 403);
+		}
+		if (openDraft(await this.latestVersion(slug, id))) await this.snapshotVersion(col, doc);
+		return this.afterRead(req, col, doc, opts.depth ?? 1, this.resolveLocale(opts));
 	}
 
 	/** Revert a published doc to draft state (hides it from published-only readers). */
@@ -1349,6 +1426,63 @@ export class CMS {
 
 function clamp(n: number, min: number, max: number): number {
 	return Math.min(Math.max(n, min), max);
+}
+
+/** Snapshot key listing a table-mode draft's edited fields (1.8.0). */
+const DRAFT_FIELDS = '_draftFields';
+
+function fieldNames(col: CollectionConfig): string[] {
+	return col.fields.map((f) => f.name);
+}
+
+function pick(src: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const k of keys) if (k in src) out[k] = src[k];
+	return out;
+}
+
+/** The latest version's snapshot when it is an unpublished draft, else null. */
+function openDraft(latest: VersionDoc | null): Doc | null {
+	const snap = latest?.snapshot as Doc | undefined;
+	return snap && snap._status === 'draft' ? snap : null;
+}
+
+/** A table-mode draft's edited fields; null = a full-copy draft (pre-1.8.0). */
+function draftFieldsOf(snapshot: Doc): string[] | null {
+	const f = snapshot[DRAFT_FIELDS];
+	return Array.isArray(f) ? f.filter((x): x is string => typeof x === 'string') : null;
+}
+
+/** The live row with a table-mode draft's edits on top. */
+function layerDraft(live: Doc, draft: Doc): Doc {
+	const fields = draftFieldsOf(draft);
+	const edits = fields ? pick(draft, fields) : stripMeta(draft);
+	delete edits[DRAFT_FIELDS];
+	return { ...live, ...edits, _status: 'draft', updatedAt: draft.updatedAt ?? live.updatedAt };
+}
+
+/** Empty is empty, and key order is not an edit (same rule as version compare). */
+const blankValue = (v: unknown) =>
+	v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+function stableJson(v: unknown): string {
+	return JSON.stringify(v ?? null, (_k, x) =>
+		x && typeof x === 'object' && !Array.isArray(x)
+			? Object.fromEntries(Object.keys(x).sort().map((k) => [k, (x as Record<string, unknown>)[k]]))
+			: x
+	);
+}
+function sameValue(a: unknown, b: unknown): boolean {
+	return (blankValue(a) && blankValue(b)) || stableJson(a) === stableJson(b);
+}
+
+/**
+ * Is this field unchanged? A checkbox is only ticked or not, but a table
+ * column can hold NULL ("unknown"); the form sends unticked as false, so
+ * NULL vs false is not an edit. Ticking it is.
+ */
+function sameFieldValue(field: { type: string }, a: unknown, b: unknown): boolean {
+	if (field.type === 'checkbox') return Boolean(a) === Boolean(b);
+	return sameValue(a, b);
 }
 
 function stripMeta(doc: Doc): Record<string, unknown> {

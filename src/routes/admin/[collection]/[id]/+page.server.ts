@@ -26,7 +26,11 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 				draft: true,
 				locale
 			});
-			hasDraftChanges = (draft.updatedAt ?? '') > (doc.updatedAt ?? '');
+			// A pending draft over a published doc always counts (1.8.0: in table
+			// mode the row's updatedAt moves with writes made outside the CMS).
+			hasDraftChanges =
+				(draft._status === 'draft' && doc._status === 'published') ||
+				(draft.updatedAt ?? '') > (doc.updatedAt ?? '');
 			formDoc = draft;
 		}
 
@@ -148,6 +152,16 @@ export const actions: Actions = {
 			await cms.publish({ user }, params.collection, params.id);
 			await cms.releaseLock(params.collection, params.id, user);
 			return { saved: true, published: true };
+		} catch (err) {
+			return asActionError(err);
+		}
+	},
+
+	/** Throw away the open draft; the published doc is untouched (1.8.0). */
+	discardDraft: async ({ locals, params }) => {
+		try {
+			await locals.cms.discardDraft({ user: locals.user }, params.collection, params.id);
+			return { saved: true, discarded: true };
 		} catch (err) {
 			return asActionError(err);
 		}

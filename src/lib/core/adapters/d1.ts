@@ -53,6 +53,12 @@ export class D1Adapter implements DatabaseAdapter {
 		await this.db.exec(
 			`CREATE TABLE IF NOT EXISTS documents (collection TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (collection, id))`
 		);
+		// 1.8.0: version lookups (latest version, history, prune) filter on the
+		// snapshot's parent; without this every lookup scans all snapshots of
+		// the collection. Build it yourself first on a large live database.
+		await this.db.exec(
+			`CREATE INDEX IF NOT EXISTS documents_parent ON documents (collection, json_extract(data, '$.parent'), created_at)`
+		);
 		this.ready = true;
 	}
 
