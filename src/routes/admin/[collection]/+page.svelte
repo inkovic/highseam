@@ -94,9 +94,19 @@
 			{/if}
 		</div>
 	{/each}
+	{#if data.collection.drafts}
+		<!-- 1.8.1: docs with an open (unpublished) draft -->
+		<div class="flex flex-col gap-0.5">
+			<label class="text-[10px] tracking-wide text-(--color-muted) uppercase" for="f_drafts">Drafts</label>
+			<select id="f_drafts" name="drafts" value={data.openDrafts ? 'open' : ''} class="rounded-(--radius) border border-(--color-border) bg-(--color-elevate) px-2 py-1.5 text-sm focus:border-(--color-primary) focus:outline-none">
+				<option value="">Any</option>
+				<option value="open">Unpublished changes</option>
+			</select>
+		</div>
+	{/if}
 	{#if data.sort !== '-createdAt'}<input type="hidden" name="sort" value={data.sort} />{/if}
 	<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm hover:bg-(--color-elevate)">Apply</button>
-	{#if data.search || data.facets.some((f) => f.value)}
+	{#if data.search || data.facets.some((f) => f.value) || data.openDrafts}
 		<a href="?" class="px-2 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">Clear</a>
 	{/if}
 </form>
@@ -113,8 +123,10 @@
 		<span class="text-sm font-medium">{selected.size} selected</span>
 		{#each [...selected] as id (id)}<input type="hidden" name="ids" value={id} />{/each}
 		{#if data.collection.drafts}
-			<button name="op" value="publish" class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Publish</button>
-			<button name="op" value="unpublish" class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Unpublish</button>
+			<button name="op" value="publish" onclick={(e) => { if (!confirm(`Publish ${selected.size} document(s)? Their drafts go live.`)) e.preventDefault(); }} class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Publish</button>
+			{#if data.collection.unpublish}
+				<button name="op" value="unpublish" class="rounded border border-(--color-border) px-2.5 py-1 text-xs hover:border-(--color-primary)">Unpublish</button>
+			{/if}
 		{/if}
 		{#if action}
 			<input type="hidden" name="actionUrl" value={action.url} />
@@ -198,7 +210,7 @@
 			{:else}
 				<tr>
 					<td colspan={columns.length + 2} class="px-4 py-12 text-center text-(--color-muted)">
-						{#if data.search || data.facets.some((f) => f.value)}
+						{#if data.search || data.facets.some((f) => f.value) || data.openDrafts}
 							Nothing matches these filters.
 							<a href="?" class="text-(--color-primary) hover:underline">Clear them</a>
 						{:else}

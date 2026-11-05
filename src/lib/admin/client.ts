@@ -60,6 +60,8 @@ export interface ClientCollection {
 	hidden: boolean;
 	versioned: boolean;
 	drafts: boolean;
+	/** Offer Unpublish (versions.unpublish, default true). 1.8.1. */
+	unpublish: boolean;
 	upload: boolean;
 	uploadAccept?: string;
 	actions: { label: string; url: string; confirm?: string }[];
@@ -152,6 +154,7 @@ export function toClientCollection(col: CollectionConfig): ClientCollection {
 		auth: Boolean(col.auth),
 		versioned: Boolean(col.versions),
 		drafts: Boolean(col.versions && (versionsCfg.drafts ?? false)),
+		unpublish: Boolean(col.versions && (versionsCfg.drafts ?? false) && (versionsCfg.unpublish ?? true)),
 		upload: Boolean(col.upload),
 		uploadAccept:
 			typeof col.upload === 'object' && col.upload.mimeTypes
@@ -189,6 +192,7 @@ export function toClientGlobal(g: import('$lib/core/types').GlobalConfig): Clien
 		hidden: Boolean(g.admin?.hidden),
 		versioned: false,
 		drafts: false,
+		unpublish: false,
 		upload: false,
 		actions: [],
 		groupsAs: 'sections',

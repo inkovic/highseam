@@ -109,7 +109,19 @@ export class MemoryAdapter implements DatabaseAdapter {
 	}
 
 	async find(collection: string, args: FindArgs) {
-		const all = (this.store[collection] ?? []).filter((d) => matchesWhere(d, args.where));
+		let all = (this.store[collection] ?? []).filter((d) => matchesWhere(d, args.where));
+		if (args.openDraftsIn) {
+			// 1.8.1: docs whose newest version is a draft.
+			const newest = new Map<string, Doc>();
+			for (const v of sortDocs(this.store[args.openDraftsIn] ?? [], '-createdAt')) {
+				const parent = String(v.parent);
+				if (!newest.has(parent)) newest.set(parent, v);
+			}
+			const open = new Set(
+				[...newest].filter(([, v]) => (v.snapshot as Doc | undefined)?._status === 'draft').map(([p]) => p)
+			);
+			all = all.filter((d) => open.has(String(d.id)));
+		}
 		const sorted = sortDocs(all, args.sort ?? '-createdAt');
 		const limit = args.limit ?? 10;
 		const page = args.page ?? 1;

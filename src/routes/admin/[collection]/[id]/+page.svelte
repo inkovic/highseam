@@ -201,7 +201,9 @@
 					: form.unpublished
 					? 'Unpublished'
 					: form.restored
-						? 'Version restored'
+						? data.restoreToDraft
+							? 'Version loaded into the draft — review it, then Publish'
+							: 'Version restored'
 						: form.saved
 							? 'Saved'
 							: '';
@@ -287,7 +289,7 @@
 				</button>
 			</form>
 		{/if}
-		{#if data.collection.drafts && data.liveStatus === 'published'}
+		{#if data.collection.unpublish && data.liveStatus === 'published'}
 			<form method="POST" action="?/unpublish" use:enhance>
 				<button class="rounded-(--radius) border border-(--color-border) px-3 py-1.5 text-sm text-(--color-muted) hover:text-(--color-fg)">
 					Unpublish
@@ -384,14 +386,14 @@
 						</div>
 						<!-- 1.7.4: what this save changed, at a glance -->
 						<p class="mt-0.5 truncate text-[11px] text-(--color-muted)">
-							{i === 0 ? 'Latest · ' : ''}{v.changed === null ? 'Oldest kept' : v.changed.length ? v.changed.join(', ') : 'No field changes'}
+							{v.openDraft ? 'Unpublished draft · ' : i === 0 ? 'Latest · ' : ''}{v.changed === null ? 'Oldest kept' : v.changed.length ? v.changed.join(', ') : 'No field changes'}
 						</p>
 						<div class="mt-1 flex items-center gap-3">
 							<button type="button" onclick={() => openCompare(v.id)} class="text-[11px] text-(--color-primary) hover:underline">Compare</button>
-							{#if i > 0}
+							{#if i > 0 && !v.openDraft}
 								<form method="POST" action="?/restore" use:enhance>
 									<input type="hidden" name="versionId" value={v.id} />
-									<button class="text-[11px] text-(--color-muted) hover:text-(--color-primary) hover:underline">Restore</button>
+									<button class="text-[11px] text-(--color-muted) hover:text-(--color-primary) hover:underline" title={data.restoreToDraft ? 'Load this version into the draft (the live page is unchanged until you Publish)' : 'Make this version live again'}>{data.restoreToDraft ? 'Restore to draft' : 'Restore'}</button>
 								</form>
 							{/if}
 						</div>

@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.8.1 — 2026-11-04 · one draft entry, restore into the draft, "Unpublished changes" filter
+
+Found testing 1.8.0 drafts on a real table-backed collection (PawScapes venues).
+
+- **An open draft is ONE version entry.** Autosave and Save draft update it in
+  place; before, every autosave appended a version (10 entries in 9 minutes for
+  three edits), each labelled with what changed since the previous autosave,
+  and they pushed real published versions past `maxPerDoc`. Now:
+  - the open draft is one row on top, labelled "Unpublished draft · <fields>"
+    with everything it changes vs the live doc (table mode: its edit list), and
+    timestamped with its last save;
+  - Publish replaces that row with the published snapshot; Discard draft
+    deletes it (1.8.0 added a copy of the live doc instead);
+  - `maxPerDoc` counts published history only, so the draft never pushes it out;
+  - consecutive draft rows from before 1.8.1 fold into one on the next save.
+  Every collection with drafts, document mode included.
+- **Restore into the draft (table mode with drafts).** Restore used to write the
+  whole old snapshot onto the live row: for a table other code also writes,
+  that silently rolled back those writes too (photos, ratings) and bypassed
+  review. Now it loads the old version into the draft: every field that differs
+  from the row now, listed on the draft entry ("Restore to draft"). Review in
+  the preview, then Publish or Discard draft. Document mode unchanged.
+- **A live write no longer closes an open draft (table mode).** A write through
+  the CMS without `draft` (a document action, the API) used to add a published
+  version above the draft, so the editor showed no draft any more. While a
+  draft is open such writes add no history row (writes made with SQL never
+  did); the draft stays on top.
+- **"Unpublished changes" list filter.** Draft collections get a Drafts select
+  (Any / Unpublished changes) next to the facets; `find(…, { openDrafts: true })`
+  in the Local API. A subquery on the versions store, so it holds for any
+  number of docs (no bound-id limits) and uses `documents_parent`.
+- **`versions.unpublish: false`** hides Unpublish (editor and list bulk) and makes
+  `unpublish()` refuse, for collections whose visibility is their own field.
+  Bulk Publish on the list now asks for confirmation.
+- README: releases go through npm; the old tarball gotcha is gone.
+
+### Stub changes
+- `routes/admin/[collection]/[id]/+page.server.ts`: the version list marks the
+  open draft and labels it vs the live doc; `restoreToDraft` in page data.
+- `routes/admin/[collection]/[id]/+page.svelte`: "Unpublished draft ·" label,
+  no Restore on the open draft, "Restore to draft" + its toast, Unpublish
+  follows `collection.unpublish`.
+- `routes/admin/[collection]/+page.server.ts` + `+page.svelte`: Drafts filter
+  (`?drafts=open`), bulk Unpublish follows `collection.unpublish`, bulk
+  Publish confirms.
+
 ## 1.8.0 — 2026-11-03 · field-scoped drafts for table-backed collections
 
 - **Drafts on table-backed collections carry only the fields they edit.**

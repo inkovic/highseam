@@ -320,7 +320,8 @@ export class CMS {
 		return {
 			drafts: v.drafts ?? false,
 			maxPerDoc: v.maxPerDoc ?? 20,
-			schedulePublish: v.schedulePublish ?? false
+			schedulePublish: v.schedulePublish ?? false,
+			unpublish: v.unpublish ?? true
 		};
 	}
 
@@ -339,13 +340,55 @@ export class CMS {
 		if (!vcfg) return;
 		const store = versionsSlug(col.slug);
 		await this.db.create(store, { parent: doc.id, snapshot: { ...doc } });
-		// prune oldest beyond maxPerDoc
-		const { docs } = await this.db.find(store, {
-			where: { parent: { equals: doc.id } },
+		await this.pruneVersions(col, String(doc.id));
+	}
+
+	/** Keep maxPerDoc versions; the open draft (1.8.1) does not count. */
+	private async pruneVersions(col: CollectionConfig, id: string): Promise<void> {
+		const vcfg = this.versionsConfig(col);
+		if (!vcfg) return;
+		const store = versionsSlug(col.slug);
+		const all = await this.versionRows(col.slug, id);
+		const lead = leadingDraftCount(all);
+		for (const old of all.slice(lead).slice(vcfg.maxPerDoc)) await this.db.delete(store, old.id);
+	}
+
+	/** Every version row of a doc, newest first. */
+	private async versionRows(slug: string, id: string): Promise<VersionDoc[]> {
+		const { docs } = await this.db.find(versionsSlug(slug), {
+			where: { parent: { equals: id } },
 			sort: '-createdAt',
 			limit: 0
 		});
-		for (const old of docs.slice(vcfg.maxPerDoc)) await this.db.delete(store, old.id);
+		return docs as VersionDoc[];
+	}
+
+	/**
+	 * Save the open draft (1.8.1): ONE version row per open draft. Autosave
+	 * and Save draft update it in place instead of appending a row each time
+	 * (which buried history and pushed published versions past maxPerDoc).
+	 * Older consecutive draft rows (from before 1.8.1) fold into it.
+	 */
+	private async saveDraftVersion(col: CollectionConfig, draftDoc: Doc): Promise<void> {
+		if (!this.versionsConfig(col)) return;
+		const store = versionsSlug(col.slug);
+		const id = String(draftDoc.id);
+		const all = await this.versionRows(col.slug, id);
+		const lead = all.slice(0, leadingDraftCount(all));
+		if (lead.length === 0) {
+			await this.snapshotVersion(col, draftDoc);
+			return;
+		}
+		await this.db.update(store, lead[0].id, { parent: draftDoc.id, snapshot: { ...draftDoc } });
+		for (const old of lead.slice(1)) await this.db.delete(store, old.id);
+	}
+
+	/** Remove the open draft's version row(s) (1.8.1). Returns the newest one removed. */
+	private async dropOpenDraft(slug: string, id: string): Promise<VersionDoc | null> {
+		const all = await this.versionRows(slug, id);
+		const lead = all.slice(0, leadingDraftCount(all));
+		for (const row of lead) await this.db.delete(versionsSlug(slug), row.id);
+		return lead[0] ?? null;
 	}
 
 	private async latestVersion(slug: string, id: string): Promise<VersionDoc | null> {
@@ -405,7 +448,9 @@ export class CMS {
 			where,
 			sort: sortArg ?? args.sort,
 			limit,
-			page
+			page,
+			// 1.8.1: only docs with an open draft
+			openDraftsIn: args.openDrafts && this.versionsConfig(col)?.drafts ? versionsSlug(slug) : undefined
 		});
 
 		const out: Doc[] = [];
@@ -924,7 +969,7 @@ export class CMS {
 				createdAt: originalDoc.createdAt,
 				updatedAt: now
 			};
-			await this.snapshotVersion(col, draftDoc);
+			await this.saveDraftVersion(col, draftDoc);
 			const { [DRAFT_FIELDS]: _f, ...shown } = draftDoc;
 			for (const hook of col.hooks?.afterChange ?? [])
 				await hook({ req, operation: 'update', collection: slug, doc: shown as Doc, data, originalDoc });
@@ -941,14 +986,19 @@ export class CMS {
 				createdAt: originalDoc.createdAt,
 				updatedAt: now
 			};
-			await this.snapshotVersion(col, draftDoc);
+			await this.saveDraftVersion(col, draftDoc);
 			for (const hook of col.hooks?.afterChange ?? [])
 				await hook({ req, operation: 'update', collection: slug, doc: draftDoc, data, originalDoc });
 			return this.afterRead(req, col, draftDoc, opts.depth ?? 1, locale);
 		}
 
 		const doc = await this.db.update(slug, id, this.wrapLocalized(col, data, locale, originalDoc));
-		await this.snapshotVersion(col, doc);
+		// Table mode (1.8.1): a live write (an action, the API, a pipeline going
+		// through the CMS) must not close someone's open draft, so while a draft
+		// is open it adds no history row (the draft stays the newest row; writes
+		// made with SQL are not in history either). Otherwise snapshot as before.
+		const draftOpen = this.fieldScopedDrafts(col) && Boolean(openDraft(await this.latestVersion(slug, id)));
+		if (!draftOpen) await this.snapshotVersion(col, doc);
 
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc, data, originalDoc });
@@ -1032,6 +1082,8 @@ export class CMS {
 		data = await this.runDataHooks(col, 'beforeChange', req, 'update', data, doc);
 
 		const updated = await this.db.update(slug, id, data);
+		// 1.8.1: the open draft's row goes; history keeps what was published.
+		await this.dropOpenDraft(slug, id);
 		await this.snapshotVersion(col, updated);
 		for (const hook of col.hooks?.afterChange ?? [])
 			await hook({ req, operation: 'update', collection: slug, doc: updated, data, originalDoc: doc });
@@ -1039,8 +1091,8 @@ export class CMS {
 	}
 
 	/**
-	 * Throw away the open draft (1.8.0): the live doc becomes the latest version
-	 * again, so the editor and previews show it. Writes nothing to the doc
+	 * Throw away the open draft (1.8.0; 1.8.1: deletes the draft's version row
+	 * instead of adding a copy of the live doc). Writes nothing to the doc
 	 * itself. No open draft = no-op.
 	 */
 	async discardDraft(req: ReqContext, slug: string, id: string, opts: OperationOptions = {}): Promise<Doc> {
@@ -1053,7 +1105,7 @@ export class CMS {
 			const access = await this.evalAccess(col, 'update', { req, id, doc });
 			if (!access.allowed) throw new APIError('Forbidden', 403);
 		}
-		if (openDraft(await this.latestVersion(slug, id))) await this.snapshotVersion(col, doc);
+		await this.dropOpenDraft(slug, id);
 		return this.afterRead(req, col, doc, opts.depth ?? 1, this.resolveLocale(opts));
 	}
 
@@ -1062,6 +1114,8 @@ export class CMS {
 		await this.init();
 		const col = this.collection(slug);
 		if (!this.versionsConfig(col)) throw new APIError(`Collection ${slug} is not versioned`, 400);
+		if (this.versionsConfig(col)?.unpublish === false)
+			throw new APIError(`Unpublish is turned off for ${slug} (versions.unpublish)`, 400);
 		const doc = await this.db.findById(slug, id);
 		if (!doc) throw new APIError('Not found', 404);
 
@@ -1120,6 +1174,15 @@ export class CMS {
 
 		const version = (await this.db.findById(versionsSlug(slug), versionId)) as VersionDoc | null;
 		if (!version || version.parent !== id) throw new APIError('Version not found', 404);
+
+		// Table mode with drafts (1.8.1): restore INTO the draft, never onto the
+		// live row. The draft gets the old version's values for every field
+		// that differs from the row now; review it in the preview, then
+		// Publish or Discard draft.
+		if (this.fieldScopedDrafts(col)) {
+			const snap = pick(stripMeta(version.snapshot as Doc), fieldNames(col));
+			return this.update(req, slug, id, snap, { ...opts, draft: true, overrideAccess: true });
+		}
 
 		const data = { ...stripMeta(version.snapshot as Doc) };
 		const updated = await this.db.update(slug, id, data);
@@ -1445,6 +1508,13 @@ function pick(src: Record<string, unknown>, keys: string[]): Record<string, unkn
 function openDraft(latest: VersionDoc | null): Doc | null {
 	const snap = latest?.snapshot as Doc | undefined;
 	return snap && snap._status === 'draft' ? snap : null;
+}
+
+/** How many of the newest version rows are drafts (the open draft; >1 only before 1.8.1). */
+function leadingDraftCount(rows: VersionDoc[]): number {
+	let n = 0;
+	while (n < rows.length && (rows[n].snapshot as Doc | undefined)?._status === 'draft') n++;
+	return n;
 }
 
 /** A table-mode draft's edited fields; null = a full-copy draft (pre-1.8.0). */
