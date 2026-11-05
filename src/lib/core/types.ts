@@ -408,6 +408,13 @@ export interface VersionsConfig {
 	 * `publishAt` date field to the collection to drive it.
 	 */
 	schedulePublish?: boolean;
+	/**
+	 * Offer "Unpublish" (editor + list bulk). Default true. Turn it off when
+	 * the collection's visibility is its own field, not `_status` (table
+	 * mode over an existing table usually is), so Unpublish would do nothing
+	 * a reader can see. 1.8.1.
+	 */
+	unpublish?: boolean;
 }
 
 export interface CollectionConfig {
@@ -463,6 +470,10 @@ export interface FindArgs {
 	page?: number;
 	/** Field name, prefix with '-' for descending. e.g. '-createdAt' */
 	sort?: string;
+	/** Only docs with an open (unpublished) draft. Versioned collections with drafts. 1.8.1. */
+	openDrafts?: boolean;
+	/** Adapter-level: the versions store holding those drafts (set by the CMS from `openDrafts`). */
+	openDraftsIn?: string;
 }
 
 export interface PaginatedDocs {

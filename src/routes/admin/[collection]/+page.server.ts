@@ -23,6 +23,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	const where: Where = {};
 	if (search && client.useAsTitle !== 'id') where[client.useAsTitle] = { contains: search };
+	// 1.8.1: "Unpublished changes" — only docs with an open draft.
+	const openDrafts = client.drafts && url.searchParams.get('drafts') === 'open';
 
 	// Faceted filters (admin.filters): build combinable where clauses + the
 	// control descriptors the UI renders. Filter state lives in the URL.
@@ -58,10 +60,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		const result = await cms.find(
 			{ user },
 			params.collection,
-			{ where: Object.keys(where).length ? where : undefined, page, limit: 20, sort },
+			{ where: Object.keys(where).length ? where : undefined, page, limit: 20, sort, openDrafts },
 			{ depth: 1 }
 		);
-		return { collection: client, result, search, sort, facets };
+		return { collection: client, result, search, sort, facets, openDrafts };
 	} catch (err) {
 		if (err instanceof APIError) error(err.status, err.message);
 		throw err;

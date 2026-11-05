@@ -52,9 +52,10 @@ Everything is driven by your `src/cms.config.ts`.
   you scaffolded before 0.4.0, add that line.
 - **Don't name your app `highseam`** — npm/pnpm refuse a dependency whose
   name matches the host package.
-- **Bump the tarball filename each release** (`highseam-0.4.0.tgz`, …).
-  In-place `file:` tarball swaps under the same name trip pnpm's lockfile
-  integrity check.
+- **Install from npm, always.** Releases go out with `npm publish`; consumers
+  bump the version and `pnpm install`. Never vendor a `file:` tarball into an
+  app: it forks that app off the release line every other app is on. A fix
+  an app needs goes into highseam and ships as a release.
 - **Dep-scan warnings on install:** some bundlers' dependency scanners log
   `UNRESOLVED_IMPORT` for `$app/*` imports inside highseam's packaged admin
   components. Cosmetic — SvelteKit resolves those aliases at build time and

@@ -34,24 +34,41 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			formDoc = draft;
 		}
 
-		let versions: { id: string; createdAt: string; status: string; title: string; changed: string[] | null }[] = [];
+		let versions: { id: string; createdAt: string; status: string; title: string; changed: string[] | null; openDraft: boolean }[] = [];
 		if (client.versioned) {
 			const list = await cms.findVersions({ user }, params.collection, params.id);
+			// 1.8.1: the open draft is ONE row on top (updated in place by autosave).
+			let lead = 0;
+			while (lead < list.length && (list[lead].snapshot as Doc | undefined)?._status === 'draft') lead++;
+			const labelOf = (name: string) => client.fields.find((f) => f.name === name)?.label ?? name;
 			versions = list.slice(0, 15).map((v, i) => {
 				const snap = (v.snapshot ?? {}) as Doc;
 				const title = snap[client.useAsTitle];
-				// 1.7.4: which fields this save changed (vs the version before it);
+				const openDraft = i < lead && doc._status === 'published';
+				// The open draft: what it changes vs the live doc (table mode: its
+				// recorded edit list, since other fields may be stale copies).
+				// Others (1.7.4): what that save changed vs the version before it;
 				// null for the oldest one kept, which has nothing to compare with.
 				const prev = list[i + 1]?.snapshot as Doc | undefined;
+				const listed = Array.isArray(snap._draftFields) ? (snap._draftFields as string[]) : null;
+				const changed = openDraft
+					? listed
+						? listed.map(labelOf)
+						: changedFields(client.fields, doc, { ...snap, _status: doc._status })
+					: prev
+						? changedFields(client.fields, prev, snap)
+						: null;
 				return {
 					id: v.id,
-					createdAt: String(v.createdAt ?? ''),
+					openDraft,
+					// an open draft is updated in place: show when it was last saved
+					createdAt: String((openDraft ? v.updatedAt : v.createdAt) ?? v.createdAt ?? ''),
 					status: String(snap._status ?? '—'),
 					title:
 						title && typeof title === 'object'
 							? String(Object.values(title)[0] ?? '')
 							: String(title ?? snap.id ?? ''),
-					changed: prev ? changedFields(client.fields, prev, snap) : null
+					changed
 				};
 			});
 		}
@@ -90,7 +107,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			mediaAspects: cms.config.media?.aspects ?? [],
 		galleryLayouts: cms.config.media?.galleryLayouts ?? [],
 			lockedBy: lock.lockedBy,
-			previewUrl
+			previewUrl,
+			// 1.8.1: table mode with drafts restores into the draft, not the live doc
+			restoreToDraft: Boolean(col.table) && client.drafts
 		};
 	} catch (err) {
 		if (err instanceof APIError) error(err.status, err.message);

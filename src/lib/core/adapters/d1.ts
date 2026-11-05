@@ -164,8 +164,30 @@ export class D1Adapter implements DatabaseAdapter {
 		return { col: this.tColFor(t, key), desc };
 	}
 
+	/**
+	 * 1.8.1: "has an open draft" = the newest version row for the doc is a
+	 * draft (no published snapshot after it). A subquery, so no bound-id
+	 * limits however many docs match; uses documents_parent.
+	 */
+	private openDraftsSQL(args: FindArgs): { sql: string; params: unknown[] } {
+		if (!args.openDraftsIn) return { sql: '', params: [] };
+		return {
+			sql:
+				` AND CAST(id AS TEXT) IN (SELECT json_extract(v.data, '$.parent') FROM documents v` +
+				` WHERE v.collection = ? AND json_extract(v.data, '$.snapshot._status') = 'draft'` +
+				` AND NOT EXISTS (SELECT 1 FROM documents p WHERE p.collection = v.collection` +
+				` AND json_extract(p.data, '$.parent') = json_extract(v.data, '$.parent')` +
+				` AND p.created_at > v.created_at` +
+				` AND coalesce(json_extract(p.data, '$.snapshot._status'), '') <> 'draft'))`,
+			params: [args.openDraftsIn]
+		};
+	}
+
 	private async tFind(t: TableInfo, args: FindArgs) {
-		const { sql: whereSql, params } = this.whereSQL(args.where, (p) => this.tColFor(t, p));
+		const w = this.whereSQL(args.where, (p) => this.tColFor(t, p));
+		const od = this.openDraftsSQL(args);
+		const whereSql = w.sql + od.sql;
+		const params = [...w.params, ...od.params];
 		const limit = args.limit ?? 10;
 		const page = args.page ?? 1;
 		const { col: sortCol, desc } = this.tSortCol(t, args.sort);
@@ -269,7 +291,10 @@ export class D1Adapter implements DatabaseAdapter {
 		const t = this.tables.get(collection);
 		if (t) return tableOp(t, () => this.tFind(t, args));
 
-		const { sql: whereSql, params } = this.whereSQL(args.where, (p) => this.dColFor(p));
+		const w = this.whereSQL(args.where, (p) => this.dColFor(p));
+		const od = this.openDraftsSQL(args);
+		const whereSql = w.sql + od.sql;
+		const params = [...w.params, ...od.params];
 		const limit = args.limit ?? 10;
 		const page = args.page ?? 1;
 
