@@ -25,3 +25,7 @@ vite.config.ts.timestamp-*
 /dist
 /templates
 *.tgz
+
+# Working notes for Peter and AI sessions (briefs, decisions, handoffs). Local to
+# the machine, not part of the package or the repo.
+/docs
